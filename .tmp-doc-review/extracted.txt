@@ -1,0 +1,188 @@
+KORAMA PLATFORM
+Software Development Instructions
+
+
+
+Online Shop | Warehouse Management System | Drone Control Model
+Built for a wider West African market and a Ghana-origin export engine
+A build brief for the engineering team
+
+
+
+
+
+Second draft. Strictly Private and Confidential
+
+1. Purpose and Scope
+
+This brief tells the engineering team what to build. It covers three systems that share one platform: the online shop that customers use, the warehouse management system that runs fulfilment, and the drone control model that governs autonomous delivery. This second draft widens the platform from Ghana and Nigeria to a wider West African market, and adds a Ghana-origin export engine. The old free-zone seventy-thirty split is removed and replaced by an origin and duty engine.
+This is a functional and technical instruction, not a line-by-line design. Each team lead should turn the sections below into detailed tickets. Where a rule is marked as a guardrail, it is not optional. Several guardrails exist because the law requires them.
+2. Architecture Overview and Shared Standards
+
+	•	One client codebase. Build the mobile application on a single cross-platform codebase, either Flutter or React Native, chosen once and kept. Build the web store to share the same design system and application programming interfaces.
+	•	Microservices backend. Split the backend by domain, in Python with Fast API and in Node.js. Services talk through a gateway for synchronous calls and an event bus for asynchronous events.
+	•	Multi-tenant data. Use PostgreSQL with strict tenant isolation, one schema or database per tenant. Enforce isolation at the data layer, not only in application code.
+	•	Multi-country, multi-currency, multi-jurisdiction from the start. Model country, currency, language, tax and duty as first-class configuration, not hard-coded assumptions. The platform must run Ghana, Nigeria and the francophone CFA-franc markets side by side, each with its own tax rules, duty tables, currency and language.
+	•	Data residency. Host in the Amazon Web Services Africa region in Cape Town. Keep personal data in region and confirm the region choice against the data protection law of each market entered.
+	•	Idempotency and events. Make every write endpoint idempotent. Publish domain events so the shop, warehouse and drone systems stay in step without tight coupling.
+	•	Contracts first. Define each service interface as a versioned contract and never break a published contract without a version bump.
+3. Cross-Cutting Requirements
+
+3.1 Identity and access
+One identity service with role-based access control across every surface. Roles include consumer, business buyer, warehouse operator, dispatcher, drone pilot or safety officer, ground courier, finance, and administrator. The business buyer role is unlocked only after the business registry check passes.
+3.2 Country, currency and tax configuration
+	•	Hold each market's currency, language, VAT rate, duty tables and invoicing rules as configuration a non-engineer can maintain.
+	•	Price, charge and settle in the local currency of each market: cedi, naira and CFA franc, extensible to others.
+	•	Apply the correct value-added tax and electronic-invoicing rules per market, starting with Ghana's electronic VAT.
+3.3 Data protection and security
+	•	Comply with the data protection law of each market, including Ghana's Data Protection Act, 2012 and Nigeria's Data Protection Act, 2023.
+	•	Encrypt data in transit and at rest, manage secrets in a vault, and tokenise cards so raw card data is never stored.
+	•	Log every privileged action to a tamper-evident audit trail.
+3.4 Delivery discipline and resilience
+	•	Continuous integration and deployment with automated tests as a merge gate; separate development, staging and production.
+	•	Observability from day one: structured logs, metrics, tracing and alerts.
+	•	Assume patchy connectivity. Customer, scanner and courier applications must work offline and sync. The drone control model must never depend on a live consumer connection to fly safely.
+
+4. System A: Online Shop
+
+The shop is the customer-facing storefront on web and mobile. It serves consumers, business buyers and cross-border resellers across every market from one codebase, separated by role, currency and language. Build the modules below.
+Module
+What it must do
+Catalogue and verticals
+Present the lifestyle verticals with product detail, media, variants, stock and price. Support tiered pricing by role and a per-market catalogue, currency and language.
+Search and discovery
+Fast search with filters, categories and typo tolerance, returning in-region low-latency results.
+AI curation feed
+A Fast API pipeline that builds a behavioral tag matrix at sign-up and personalizes the feed by demand vectors, local weather and payday cycles. Serve a sensible default before data exists.
+Find My Size
+A clothing widget mapping height, weight and fit preference against supplier fabric tolerances, aiming to hold clothing returns under five per cent.
+Cart and checkout
+A single cart across verticals, landmark address capture, delivery method selection, and clear totals including the correct local tax and, where relevant, duty.
+Payments
+Support mobile money, cards and cash on delivery per market. Tokenize cards. Settle in local currency through a licensed partner in each currency zone.
+Roles and B2B unlock
+One application with role-based access control. On a verified business registry upload, unlock bulk pricing, minimum order quantities and freight.
+Orders and tracking
+Live order status from placement to delivery, including the fulfilment method used.
+Notifications and returns
+Order, payment and delivery notifications across push, SMS and email, plus a returns, refund and ratings flow that feeds the curation feed.
+4.1 Key data entities
+product, variant, price tier, market, currency, cart, order, order line, customer, business account, address, payment, shipment, return, rating
+
+5. System B: Warehouse Management System
+
+The warehouse system runs the physical operation across the Ghana base, the destination-market warehouses, and the Ghana-origin export staging. It controls stock, prepares orders, clears customs and tax per market, and now drives the origin engine for exports. Build the modules below.
+Module
+What it must do
+Receiving
+Book in imports at each market's warehouse, capture supplier, batch and quantity, and reconcile against purchase orders.
+Put-away and locations
+Assign bin and zone locations. Model each site and its zones distinctly across all markets.
+Inventory and stock ledger
+A single source of truth for stock, with every movement recorded and auditable in real time, per site and per market.
+FEFO engine
+First-expired, first-out picking for cosmetics and packaged food, driven by batch expiry, to eliminate write-offs.
+Batch and expiry
+Track batch numbers and expiry dates from receiving to dispatch.
+Barcode and scanning
+Barcode-driven receiving, put-away, picking and packing on handheld scanners that work offline and sync.
+Picking and packing
+Generate pick lists, confirm by scan, and pack with weight capture for the delivery router.
+B2B pallet and MOQ
+Handle pallet and bulk orders, minimum order quantities and freight handover for business buyers.
+Multi-site
+Run the Ghana base, the destination-market warehouses at Lekki, Abidjan, Dakar, Lome, Cotonou and Tema, and the Ghana export-staging site, with transfers between them.
+Origin and duty engine
+For each stock line, record its origin and its duty status. Compute the correct import duty and tax on entry per market, and determine whether goods qualify as Ghana-origin for duty-free export.
+Certificate of origin
+Generate and manage ECOWAS and AfCFTA certificates of origin for qualifying Ghana-origin exports, with the supporting value-addition evidence.
+Ghana-origin value-addition
+Track the light manufacturing or transformation performed in Ghana, the inputs consumed, and the value added, to prove originating status.
+Customs and tax integration
+Integrate per market with the customs system and the tax authority electronic VAT service, appending IRN and QR codes to invoices at the point of domestic sale in Ghana and the equivalent elsewhere.
+Dispatch and handover
+Produce dispatch tickets and hand parcels to the drone or courier system with weight and destination.
+5.1 Origin and duty guardrail
+Guardrail, replaces the old seventy-thirty rule.  The platform no longer polices a free-zone export quota. Instead, it must get origin and duty right. For every line, the system records whether the goods are third-country imports, on which the correct local duty and tax are charged in the market of sale, or Ghana-origin goods that qualify for duty-free movement under ECOWAS and AfCFTA rules. Two hard stops. First, only goods with genuine, evidenced Ghanaian transformation may be flagged as originating; simple labelling or repackaging must never set the origin flag. Second, a certificate of origin may be issued only where the value-addition record supports it. Keep imported and Ghana-origin stock distinguishable at all times.
+5.2 Key data entities
+site, market, zone, bin, stock item, origin status, duty class, batch, expiry, movement, purchase order, receipt, pick list, pack, pallet, transfer, value addition record, certificate of origin, customs declaration, tax invoice, dispatch
+
+6. System C: Drone Control Model
+
+The drone control model governs autonomous cargo delivery from warehouse rooftops to rural and suburban lockboxes, with a ground courier completing the final leg. Safety and the law come first. Read the guardrail before the modules.
+Regulatory guardrail, read first.  Autonomous flight beyond visual line of sight is tightly restricted and not routinely permitted. Build the system so every flight is gated by a valid civil aviation authorization in the country of flight, a remote pilot or safety officer can take manual control at any moment, and the default fallback is a visual-line-of-sight or ground-courier route. Enforce geofencing that keeps drones out of airport exclusion zones, restricted airspace and banned urban corridors. Do not ship autonomous urban delivery without the aviation authority's written approval in that market. The software must refuse to dispatch where authorization, airspace or weather are not satisfied.
+Module
+What it must do
+Fleet and asset management
+Register each drone, its airworthiness, battery health, maintenance log and authorization status. Ground any aircraft that fails a check.
+Eligibility and weight router
+At checkout, compute cart weight. If the basket exceeds the payload limit, hide the drone option and default to a ground courier dispatch ticket.
+Weather lockout
+Poll civil aviation weather feeds. If wind or rain thresholds are exceeded, disable the drone option and reroute to ground couriers automatically.
+Authorization gate
+Before any dispatch, confirm a valid flight authorization covers the route, airspace and time in that country. No authorization, no flight.
+Route planning and mapping
+Use Mapbox for the consumer view and three-dimensional paths, Google geocoding in the background to turn landmarks into coordinates, and internal OpenStreetMap tiles for high-frequency location pings at zero backend map cost.
+Autonomous flight and failsafe
+Fly planned straight-line routes with continuous telemetry. On any fault, loss of link or geofence breach, execute a safe failsafe.
+Micro-hub lockboxes
+Manage secure lockboxes at rural and suburban hubs, with drop confirmation and courier handover.
+Ground courier handover
+Dispatch the ground bike fleet for the final leg, with proof of delivery and, in volatile-currency markets, the cash-on-delivery escrow wallet.
+Telemetry and black box
+Record a tamper-evident flight log for every sortie for audit and incident review.
+Manual override
+Give the remote pilot or safety officer immediate manual control and a hard stop at all times.
+6.1 Cash on delivery and currency guardrail
+Guardrail.  For cash on delivery, the courier application must enforce a pre-funded escrow wallet, lock the wallet on cash collection, require deposit at an agent terminal within a set window, and route any currency conversion only through a licensed payment partner. This matters most in Nigeria, where the naira is volatile. In the francophone CFA-franc markets the currency is pegged to the euro and convertible, so the pressure is lower, but the escrow discipline stays. Never build an in-house cross-border currency conversion rail; that is a regulated activity.
+6.2 Key data entities
+drone, airworthiness check, flight authorization, geofence, weather reading, sortie, route, waypoint, lockbox, drop, courier, escrow wallet, proof of delivery, telemetry log
+
+7. Compliance Guardrails Built into the Software
+
+These rules must live in the code, not only in a policy. Each is a hard stop the system enforces on its own, per market.
+Area
+Guardrail the system enforces
+Why
+Tax
+Apply the correct local VAT and append IRN and QR codes to invoices via the tax authority service
+Electronic VAT and per-market tax law
+Customs and duty
+Compute and clear the correct import duty per market on third-country goods
+ECOWAS common external tariff and local customs
+Origin
+Flag goods as Ghana-origin only on evidenced transformation; never on labelling
+ECOWAS and AfCFTA rules of origin
+Certificate of origin
+Issue a certificate only where the value-addition record supports it
+Preventing origin fraud
+Aviation
+Gate every flight on authorization, airspace, geofence and weather; manual override always available
+Civil aviation rules on drones and flight safety
+Payments
+Escrow wallet for cash on delivery; conversion only via a licensed partner
+Foreign exchange and payments law
+Privacy
+Minimize data, record consent, honor access and deletion, per market
+Data protection law in each market
+8. Delivery Roadmap and Build Order
+
+Build in phases. Prove the core in the home markets before widening. Do not build autonomous drone delivery first, and do not switch on a new market until its tax, duty, currency and origin configuration is complete and tested.
+Phase
+Build
+Market
+Phase 1, foundation
+Identity and roles; catalogue and checkout; payments; core inventory and receiving; local tax and duty
+Ghana and Nigeria
+Phase 2, fulfilment and origin
+FEFO and batch; picking and packing; ground courier dispatch; the origin and duty engine; certificate of origin; the Ghana-origin value-addition module; B2B unlock
+Ghana and Nigeria, first exports
+Phase 3, francophone entry
+Multi-currency and multi-language hardening; CFA-franc settlement; destination warehouses
+Cote d'Ivoire and Senegal
+Phase 4, distribution and flight
+Togo and Benin nodes; drone control model behind the authorization gate; AI curation at full strength
+Togo, Benin, then Guinea
+First thing to build.  Start with identity and roles, the catalogue, checkout and core inventory for Ghana and Nigeria. That loop is the spine. Add the origin and duty engine early, because the Ghana-origin export model depends on it. Treat drones as the last major workstream, gated by regulatory approval in each market.
+
+End of document.
