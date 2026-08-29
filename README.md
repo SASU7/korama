@@ -18,6 +18,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm smoke
+pnpm migration:check
 pnpm build
 ```
 
@@ -29,5 +30,6 @@ pnpm build
 - `lib/demo-store.ts` — server-owned deterministic test adapter.
 - `supabase/` — local migration, seed, private helper, RLS, index, and storage contracts.
 - `docs/` — product specification, architecture, workstreams, and runbook.
+- `docs/as-built.md` — verified implementation boundary and production handoff.
 
 The local demo adapter is intentionally not production persistence. Connect the Supabase adapter and real Paystack/Mapbox credentials only after local migration review and the approval gates in the plan.

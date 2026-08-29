@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, ChevronDown, CircleAlert, CloudRain, CreditCard, Database, FileCheck2, Fuel, LockKeyhole, Map, PackageCheck, Plane, RefreshCw, Search, ShieldCheck, ShoppingBag, Sparkles, Truck, Warehouse, Weight } from "lucide-react";
 import { DemoState, formatMoney, getProduct, Product, seedDemoState, UserRole } from "@/lib/domain";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type Surface = "shop" | "operations" | "compliance" | "delivery" | "markets";
 const roleLabels: Record<UserRole, string> = { consumer: "Nigerian consumer", warehouse_operator: "Warehouse + compliance", safety_officer: "Drone safety officer" };
@@ -26,12 +27,20 @@ export default function PrototypeWorkspace({ initialRole = "consumer" }: { initi
   const [error, setError] = useState("");
   const [roleOpen, setRoleOpen] = useState(false);
   const [market, setMarket] = useState<"NG" | "GH">("NG");
+  const [syncStatus, setSyncStatus] = useState<"local" | "polling" | "realtime">("local");
 
-  async function refresh() {
+  useEffect(() => {
+    if (!roleOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setRoleOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [roleOpen]);
+
+  const refresh = useCallback(async () => {
     const response = await fetch("/api/demo/state", { cache: "no-store" });
     if (!response.ok) throw new Error("Couldn’t refresh the demo state");
     setState(await response.json() as DemoState);
-  }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -41,6 +50,17 @@ export default function PrototypeWorkspace({ initialRole = "consumer" }: { initi
       .catch(() => { if (active) setError("The demo state could not be loaded. Try refresh."); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const client = createSupabaseBrowserClient();
+    const poll = window.setInterval(() => { setSyncStatus((status) => status === "realtime" ? status : "polling"); void refresh().catch(() => setError("Live state is unavailable. Try refresh.")); }, 10000);
+    if (!client) return () => window.clearInterval(poll);
+    const channel = client.channel("korama-private-events", { config: { private: true } })
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_events" }, () => { void refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sortie_events" }, () => { void refresh(); })
+      .subscribe((status: string) => { if (status === "SUBSCRIBED") setSyncStatus("realtime"); else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setSyncStatus("polling"); });
+    return () => { window.clearInterval(poll); void client.removeChannel(channel); };
+  }, [refresh]);
 
   async function mutate(url: string, options?: RequestInit, success?: string) {
     setBusy(true); setError("");
@@ -62,7 +82,7 @@ export default function PrototypeWorkspace({ initialRole = "consumer" }: { initi
   return <main className="workspace-frame">
     <header className="workspace-bar">
       <div className="brand-lockup"><span className="brand-mark">K</span><span>KORAMA</span></div>
-      <div className="workspace-context"><span className="context-dot" /> Private demo · Ghana + Nigeria</div>
+      <div className="workspace-context"><span className="context-dot" /> Private demo · Ghana + Nigeria <span className="sync-status">{syncStatus === "realtime" ? "Realtime" : syncStatus === "polling" ? "Refetch fallback" : "Local adapter"}</span></div>
       <div className="workspace-actions">
         <button type="button" className="reset-button" onClick={reset} disabled={busy}><RefreshCw size={14} aria-hidden="true" /> Reset scenario</button>
         <div className="role-switch"><button type="button" className="role-button" onClick={() => setRoleOpen((open) => !open)} aria-expanded={roleOpen} aria-haspopup="menu"><span className="avatar">{role === "consumer" ? "NC" : role === "warehouse_operator" ? "OP" : "SO"}</span><span className="role-copy"><strong>{roleLabels[role]}</strong><small>Server-guided identity</small></span><ChevronDown size={16} aria-hidden="true" /></button>{roleOpen && <div className="role-menu workspace-role-menu" role="menu"><p>Actions are scoped to the selected guided identity.</p>{(Object.keys(roleLabels) as UserRole[]).map((key) => <button type="button" role="menuitem" key={key} onClick={() => switchRole(key)}>{roleLabels[key]} {role === key && "✓"}</button>)}</div>}</div>
@@ -106,7 +126,36 @@ function OperationsSurface({ state, mutate, busy }: { state: DemoState; mutate: 
 
 function ComplianceSurface({ state }: { state: DemoState }) { return <><SectionTitle eyebrow="Compliance · provisional" title="Evidence before origin claims." detail="Illustrative assessment · Watermarked preview · No legal certificate" /><div className="compliance-grid"><div className="panel origin-panel"><div className="assessment-status"><span className="assessment-icon"><ShieldCheck size={20} aria-hidden="true" /></span><span><small>Assessment status</small><strong>Provisionally eligible</strong></span><Badge tone="amber">Demo only</Badge></div><div className="origin-rule"><strong>Why this qualifies</strong><p>{state.compliance.transformation}</p></div><h3>Evidence chain</h3>{state.compliance.evidence.map((item, index) => <div className="evidence-row" key={item}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item}</strong><Check size={15} aria-hidden="true" /></div>)}<div className="rejection-note"><CircleAlert size={15} aria-hidden="true" /><span>Repackaging or relabelling alone would produce a rejected assessment.</span></div></div><div className="certificate-card"><div className="watermark">{state.compliance.certificateWatermark}</div><div className="certificate-head"><FileCheck2 size={22} aria-hidden="true" /><span>Origin assessment preview</span></div><p className="certificate-kicker">ECOWAS / AfCFTA · Illustrative</p><h3>Ghana-origin export record</h3><div className="certificate-fields"><span>Product <strong>Nokware shea repair balm</strong></span><span>Batch <strong>NK-SB-2407</strong></span><span>Movement <strong>Tema → Lekki</strong></span><span>Duty quote <strong>{state.compliance.dutyQuote}</strong></span></div><div className="certificate-footer"><span>Preview only</span><span>Not valid for customs</span></div></div></div></> }
 
-function DeliverySurface({ state, mutate, busy }: { state: DemoState; mutate: (url: string, options?: RequestInit, success?: string) => Promise<void>; busy: boolean }) { const ref = state.order?.reference; const sortie = state.sortie; return <><SectionTitle eyebrow="Delivery · simulated digital twin" title="Safety gates the last mile." detail="Lekki → fictional micro-hub · Static route · No real aircraft" />{!state.order ? <div className="panel-empty large"><Plane size={30} aria-hidden="true" /><strong>Waiting for a packed order</strong><p>The delivery twin activates after the operator packs the shea parcel.</p></div> : <div className="delivery-grid"><div className="map-panel"><div className="map-top"><span><Map size={16} aria-hidden="true" /> Static route preview</span><Badge tone="amber">Simulated</Badge></div><div className="route-map"><div className="map-grid" /><div className="route-path"><span className="map-node start">Lekki</span><span className="map-node mid">Waypoint</span><span className="map-node end">Micro-hub</span></div><div className="map-caption"><span>Route data is seeded for presentation</span><span>Mapbox token optional</span></div></div><div className="telemetry-row"><span><strong>{sortie.telemetry.at(-1)?.altitude ?? 0}m</strong><small>Altitude</small></span><span><strong>{sortie.telemetry.at(-1)?.speed ?? 0}km/h</strong><small>Speed</small></span><span><strong>{sortie.telemetry.at(-1)?.battery ?? 94}%</strong><small>Battery</small></span><span><strong>{sortie.telemetry.at(-1)?.link ?? "Ready"}</strong><small>Link</small></span></div></div><div className="panel gate-panel"><div className="panel-header"><div><p className="eyebrow">Preflight decision</p><h3>{sortie.status.replace("_", " ")}</h3></div><Fuel size={19} aria-hidden="true" /></div><div className="gate-list">{sortie.gates.map((gate) => <div className={gate.passed ? "gate-row passed" : "gate-row failed"} key={gate.key}><span>{gate.passed ? <Check size={14} aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}</span><span><strong>{gate.label}</strong><small>{gate.detail}</small></span></div>)}</div><div className="delivery-actions">{sortie.status === "draft" && <button type="button" className="primary-button wide" disabled={busy || state.order.status !== "packed"} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: "preflight" }) }, "All safety gates passed. Mission cleared for the demo.")}>Run preflight <ArrowRight size={16} aria-hidden="true" /></button>}{(sortie.status === "preflight" || sortie.status === "cleared") && <button type="button" className="primary-button wide" disabled={busy} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: "launch" }) }, "Mission launched. Telemetry playback is running.")}>Launch simulated sortie <Plane size={16} aria-hidden="true" /></button>}<button type="button" className="weather-button" disabled={busy} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: sortie.weather === "unsafe" ? "reset_weather" : "inject_weather" }) }, sortie.weather === "unsafe" ? "Weather cleared; sortie reset for another demo run." : "Unsafe weather locked out flight and created a courier fallback.")}>{sortie.weather === "unsafe" ? <RefreshCw size={15} aria-hidden="true" /> : <CloudRain size={15} aria-hidden="true" />}{sortie.weather === "unsafe" ? "Clear weather injection" : "Inject unsafe weather"}</button></div>{sortie.fallbackReason && <div className="fallback-note"><Truck size={15} aria-hidden="true" /><span><strong>Ground-courier fallback</strong><small>{sortie.fallbackReason}</small></span></div>}</div></div>}</> }
+function DeliverySurface({ state, mutate, busy }: { state: DemoState; mutate: (url: string, options?: RequestInit, success?: string) => Promise<void>; busy: boolean }) { const ref = state.order?.reference; const sortie = state.sortie; return <><SectionTitle eyebrow="Delivery · simulated digital twin" title="Safety gates the last mile." detail="Lekki → fictional micro-hub · Static route · No real aircraft" />{!state.order ? <div className="panel-empty large"><Plane size={30} aria-hidden="true" /><strong>Waiting for a packed order</strong><p>The delivery twin activates after the operator packs the shea parcel.</p></div> : <div className="delivery-grid"><div className="map-panel"><div className="map-top"><span><Map size={16} aria-hidden="true" /> Static route preview</span><Badge tone="amber">Simulated</Badge></div><MapboxRoutePreview /><div className="telemetry-row"><span><strong>{sortie.telemetry.at(-1)?.altitude ?? 0}m</strong><small>Altitude</small></span><span><strong>{sortie.telemetry.at(-1)?.speed ?? 0}km/h</strong><small>Speed</small></span><span><strong>{sortie.telemetry.at(-1)?.battery ?? 94}%</strong><small>Battery</small></span><span><strong>{sortie.telemetry.at(-1)?.link ?? "Ready"}</strong><small>Link</small></span></div></div><div className="panel gate-panel"><div className="panel-header"><div><p className="eyebrow">Preflight decision</p><h3>{sortie.status.replace("_", " ")}</h3></div><Fuel size={19} aria-hidden="true" /></div><div className="gate-list">{sortie.gates.map((gate) => <div className={gate.passed ? "gate-row passed" : "gate-row failed"} key={gate.key}><span>{gate.passed ? <Check size={14} aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}</span><span><strong>{gate.label}</strong><small>{gate.detail}</small></span></div>)}</div><div className="delivery-actions">{sortie.status === "draft" && <button type="button" className="primary-button wide" disabled={busy || state.order.status !== "packed"} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: "preflight" }) }, "All safety gates passed. Mission cleared for the demo.")}>Run preflight <ArrowRight size={16} aria-hidden="true" /></button>}{(sortie.status === "preflight" || sortie.status === "cleared") && <button type="button" className="primary-button wide" disabled={busy} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: "launch" }) }, "Mission launched. Telemetry playback is running.")}>Launch simulated sortie <Plane size={16} aria-hidden="true" /></button>}<button type="button" className="weather-button" disabled={busy} onClick={() => mutate(`/api/delivery/sorties/${ref}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: sortie.weather === "unsafe" ? "reset_weather" : "inject_weather" }) }, sortie.weather === "unsafe" ? "Weather cleared; sortie reset for another demo run." : "Unsafe weather locked out flight and created a courier fallback.")}>{sortie.weather === "unsafe" ? <RefreshCw size={15} aria-hidden="true" /> : <CloudRain size={15} aria-hidden="true" />}{sortie.weather === "unsafe" ? "Clear weather injection" : "Inject unsafe weather"}</button></div>{sortie.fallbackReason && <div className="fallback-note"><Truck size={15} aria-hidden="true" /><span><strong>Ground-courier fallback</strong><small>{sortie.fallbackReason}</small></span></div>}</div></div>}</> }
+
+function MapboxRoutePreview() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+  useEffect(() => {
+    if (!token || !containerRef.current) return;
+    let disposed = false;
+    let map: import("mapbox-gl").Map | null = null;
+    import("mapbox-gl").then(({ default: mapboxgl }) => {
+      if (disposed || !containerRef.current) return;
+      mapboxgl.accessToken = token;
+      map = new mapboxgl.Map({ container: containerRef.current, style: "mapbox://styles/mapbox/light-v11", center: [3.55, 6.45], zoom: 10, attributionControl: true });
+      map.on("load", () => {
+        if (!map || disposed) return;
+        map.addSource("korama-demo-route", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[3.49, 6.43], [3.57, 6.48], [3.64, 6.54]] } } });
+        map.addLayer({ id: "korama-demo-route-line", type: "line", source: "korama-demo-route", paint: { "line-color": "#136b50", "line-width": 4, "line-dasharray": [1.5, 1] } });
+        setMapReady(true);
+      });
+    }).catch(() => setMapReady(false));
+    return () => { disposed = true; map?.remove(); };
+  }, [token]);
+
+  if (!token) return <StaticRoutePreview />;
+  return <div className="route-map mapbox-route" ref={containerRef} aria-label="Mapbox static simulated route">{!mapReady && <div className="map-loading">Loading optional Mapbox route…</div>}<div className="map-caption"><span>Static route data · simulated</span><span>Mapbox token configured</span></div></div>;
+}
+
+function StaticRoutePreview() { return <div className="route-map"><div className="map-grid" /><div className="route-path"><span className="map-node start">Lekki</span><span className="map-node mid">Waypoint</span><span className="map-node end">Micro-hub</span></div><div className="map-caption"><span>Route data is seeded for presentation</span><span>Mapbox token optional</span></div></div>; }
 
 function DeliveryCompletionButton({ state, mutate, busy }: { state: DemoState; mutate: (url: string, options?: RequestInit, success?: string) => Promise<void>; busy: boolean }) { if (!state.order || state.sortie.status !== "en_route") return null; return <div className="delivery-complete-bar"><span><PackageCheck size={18} aria-hidden="true" /><strong>Telemetry reached the fictional micro-hub.</strong></span><button type="button" className="primary-button" disabled={busy} onClick={() => mutate(`/api/delivery/sorties/${state.order?.reference}/command`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: "complete" }) }, "Drop confirmed. Order delivered in the simulated journey.")}>Confirm drop <Check size={15} aria-hidden="true" /></button></div> }
 

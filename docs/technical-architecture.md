@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Technical Architecture
 
-Status: Phase 0 contract, ready for founder review  
+Status: As-built deterministic prototype; production adapters pending  
 Date: 2026-08-29
 
 ## 1. Architecture shape
@@ -133,10 +133,12 @@ production secrets belong in the repository or browser bundle.
 
 ## 10. Current implementation boundary
 
-The repository now includes a deterministic demo adapter for the full investor flow:
+The repository includes a deterministic demo adapter for the full investor flow:
 catalogue/provenance, server-quoted checkout, test payment verification, FEFO, order
 advancement, origin evidence, watermarked certificate preview, drone gates, telemetry,
-weather lockout, and courier fallback. Supabase persistence, true SSR claims, Realtime,
-Paystack network calls, Mapbox rendering, and deployment wiring remain isolated follow-
-up adapters before staging. The full design contract remains in this document; the
-local demo adapter is intentionally explicit so it cannot be mistaken for production.
+weather lockout, courier fallback, shallow capability actions, and role-scoped HTTP
+contracts. The client uses private Supabase Realtime subscriptions when configured,
+falls back to periodic refetching, and uses Mapbox for the seeded route when a public
+token is configured. Supabase persistence, observability, and deployment credentials
+remain isolated follow-up adapters before staging. The local demo adapter is intentionally
+explicit so it cannot be mistaken for production.

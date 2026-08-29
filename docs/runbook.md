@@ -25,6 +25,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm smoke
+pnpm migration:check
 pnpm build
 pnpm install --frozen-lockfile
 ```
@@ -33,12 +34,18 @@ pnpm install --frozen-lockfile
 stripping. The Supabase migration is the persistence contract; the default investor
 demo uses the server-owned deterministic store so it runs without credentials.
 
+`pnpm migration:check` statically verifies that the migration contains the core tables,
+RLS markers, guided-role policies, and unique index names. Full `supabase db lint` and
+seed/reset execution require Docker; if Docker is unavailable, record that result and
+do not apply the migration to a remote project.
+
 ## External services
 
 Phase-ready environment names are in `.env.example`. Paystack routes remain test-mode
 only until `PAYSTACK_SECRET_KEY` and `PAYSTACK_WEBHOOK_SECRET` are supplied. Webhooks
-must send an HMAC-SHA512 signature over the raw request body. Mapbox is optional for
-the current static route preview; no live flight or route planning is enabled.
+must send an HMAC-SHA512 signature over the raw request body. Mapbox is optional: when
+`NEXT_PUBLIC_MAPBOX_TOKEN` is set, the seeded route renders in Mapbox; otherwise the
+accessible static route preview remains active. No live flight or route planning is enabled.
 
 ## Reset and safety
 

@@ -6,7 +6,7 @@ for (const file of files) {
   if (!contents.trim()) throw new Error(`${file} is empty`);
 }
 const page = `${await readFile("app/page.tsx", "utf8")}\n${await readFile("components/PrototypeWorkspace.tsx", "utf8")}`;
-for (const marker of ["KORAMA-DEMO", "Nigeria", "Ghana-origin", "Roadmap", "Simulated guided identity"]) {
+for (const marker of ["KORAMA-DEMO", "Nigeria", "Ghana-origin", "Roadmap", "Server-guided identity"]) {
   if (!page.includes(marker)) throw new Error(`missing smoke marker: ${marker}`);
 }
 console.log(`smoke ok: ${files.length} files and ${5} contract markers checked`);
