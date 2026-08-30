@@ -1037,6 +1037,7 @@ export type Database = {
         Row: {
           created_at: string
           currency: string
+          delivery_address_snapshot: Json
           delivery_minor: number
           id: string
           market_id: string
@@ -1052,6 +1053,7 @@ export type Database = {
         Insert: {
           created_at?: string
           currency: string
+          delivery_address_snapshot?: Json
           delivery_minor: number
           id?: string
           market_id: string
@@ -1067,6 +1069,7 @@ export type Database = {
         Update: {
           created_at?: string
           currency?: string
+          delivery_address_snapshot?: Json
           delivery_minor?: number
           id?: string
           market_id?: string
@@ -1592,6 +1595,7 @@ export type Database = {
           operating_company_id: string
           order_id: string
           reference: string
+          status: string
           weight_grams: number
         }
         Insert: {
@@ -1601,6 +1605,7 @@ export type Database = {
           operating_company_id: string
           order_id: string
           reference: string
+          status?: string
           weight_grams: number
         }
         Update: {
@@ -1610,6 +1615,7 @@ export type Database = {
           operating_company_id?: string
           order_id?: string
           reference?: string
+          status?: string
           weight_grams?: number
         }
         Relationships: [
@@ -2123,7 +2129,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      korama_advance_order: {
+        Args: {
+          p_next_status: Database["public"]["Enums"]["order_status"]
+          p_order_reference: string
+          p_weight_grams?: number
+        }
+        Returns: Json
+      }
+      korama_allocate_order_fefo: {
+        Args: { p_order_reference: string }
+        Returns: Json
+      }
+      korama_command_sortie: {
+        Args: { p_command: string; p_order_reference: string }
+        Returns: Json
+      }
+      korama_create_order: {
+        Args: {
+          p_currency: string
+          p_delivery_address: Json
+          p_delivery_minor: number
+          p_market_id: string
+          p_operating_company_id: string
+          p_product_id: string
+          p_profile_id: string
+          p_quantity: number
+          p_reference: string
+          p_subtotal_minor: number
+          p_tax_minor: number
+          p_total_minor: number
+        }
+        Returns: Json
+      }
+      korama_verify_payment: {
+        Args: {
+          p_amount_minor: number
+          p_currency: string
+          p_idempotency_key: string
+          p_order_id: string
+          p_provider_reference: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       inventory_class:

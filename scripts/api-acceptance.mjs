@@ -50,7 +50,12 @@ server.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
 try {
   await waitForServer();
 
-  let result = await request("/api/demo/state");
+  let result = await request("/api/health");
+  assert.equal(result.response.status, 200, "health endpoint must report a ready local adapter");
+  assert.equal(result.body.status, "ok");
+  assert.equal(result.response.headers.get("x-request-id"), result.body.requestId, "health responses must include a request ID");
+
+  result = await request("/api/demo/state");
   assert.equal(result.response.status, 401, "state must require a demo session");
 
   result = await request("/api/demo/access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "wrong-code" }) });

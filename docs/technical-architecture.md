@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Technical Architecture
 
-Status: As-built deterministic prototype with optional Supabase snapshot persistence; production adapters pending
+Status: As-built deterministic prototype with optional Supabase snapshot persistence and normalized staging fixtures; production adapters pending
 Date: 2026-08-30
 
 ## 1. Architecture shape
@@ -91,8 +91,10 @@ Sortie:    draft → preflight → cleared → launched → en_route → deliver
 
 Every selected-adapter transition writes a server-side audit event when Supabase is
 enabled and accepts an idempotency key where the route mutates state. The snapshot
-adapter preserves the visible timeline, revision guard, and idempotency records;
-normalized repository methods remain a staging follow-up.
+adapter preserves the visible timeline, revision guard, and idempotency records. The
+normalized repository exposes typed catalogue, scoped operational, and order-tracking
+reads plus server-only transactional order, payment, FEFO, fulfilment, and sortie
+primitives. The HTTP adapter cutover remains a staging follow-up.
 
 ## 6. HTTP contracts
 
@@ -100,7 +102,8 @@ normalized repository methods remain a staging follow-up.
 - `POST /api/cart/quote`
 - `GET /api/payments/paystack/verify`
 - `POST /api/webhooks/paystack`
-- `POST /api/demo/reset` (shared demo-code protected reset)
+- `GET /api/health` (public, secret-free deployment readiness)
+- `POST /api/demo/reset` (warehouse-role protected reset)
 - `GET /api/demo/state` (sanitized deterministic demo view)
 - `GET /api/orders/:reference` (session-scoped view from the selected adapter)
 - `POST /api/fulfilment/orders/:reference/allocate` (selected adapter; FEFO transition)
@@ -129,8 +132,9 @@ Development, staging, and production are separate. The intended database workflo
 5. Generate TypeScript database types only after migrations stabilize; the local
    contract is checked in at `lib/supabase/database.types.ts`.
 
-The existing private `rgd-certs` bucket is preserved and reviewed; generated previews
-are watermarked and never represented as valid certificates.
+The private `rgd-certs` bucket is materialized by migration with a 10 MiB limit and
+remains non-public; generated previews are watermarked and never represented as valid
+certificates.
 
 ## 9. Security and observability
 
@@ -149,7 +153,7 @@ advancement, origin evidence, watermarked certificate preview, drone gates, tele
 weather lockout, courier fallback, route-level idempotency keys, shallow capability
 actions, and role-scoped HTTP contracts. The client uses private Supabase Realtime subscriptions when configured,
 falls back to periodic refetching, and uses Mapbox for the seeded route when a public
-token is configured. Normalized repository methods, observability, and deployment
-credentials remain isolated follow-up work before staging. Both adapters are explicitly
+token is configured. HTTP adapter cutover, observability, and deployment credentials
+remain isolated follow-up work before staging. Both adapters are explicitly
 labelled so snapshot persistence cannot be mistaken for a fully migrated production
 domain implementation.

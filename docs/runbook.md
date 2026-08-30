@@ -64,7 +64,9 @@ source; the acceptance harness checks that audit persistence is available.
 
 For a configured Supabase project, set the service-role key and a temporary seed
 password, then run `pnpm auth:bootstrap`. This creates or updates the three guided
-identities and their server-side profile/role assignments. Never put the service-role
+identities and their server-side profile/role assignments. Set
+`KORAMA_USE_SUPABASE_AUTH=true` in staging/production so protected transitions use
+the verified Supabase user and database role assignment. Never put the service-role
 key or seed password in the repository or browser environment.
 
 The guided-role cookie is signed by `KORAMA_DEMO_SESSION_SECRET`; production mode
@@ -72,8 +74,11 @@ requires that secret and a non-default access code. `pnpm env:check` fails close
 production adapter credentials or access-security settings are missing.
 
 `pnpm staging:check` is opt-in: it performs read-only checks against the configured
-Supabase REST endpoint and Mapbox style endpoint only when `KORAMA_STAGING=true` or
-`KORAMA_PRODUCTION=true`.
+Supabase REST endpoint, Auth identities, private `rgd-certs` bucket, and Mapbox style
+endpoint only when `KORAMA_STAGING=true` or `KORAMA_PRODUCTION=true`. `/api/health`
+is safe to use as a deployment readiness probe and never returns secret values.
+After deployment, set `KORAMA_DEPLOYMENT_URL` and run `pnpm deployment:check`; use
+`KORAMA_ALLOW_HTTP=true` only for a deliberate local smoke check.
 
 ## External services
 
@@ -96,9 +101,12 @@ security-definer helpers, and immutable audit/idempotency foundations.
 - The default local demo store is in-memory. Set `KORAMA_USE_SUPABASE=true` only with
   the intended project and server-only service-role credentials; this persists the
   current investor journey as a server-only aggregate snapshot.
-- The normalized commerce, inventory, compliance, and delivery tables remain the
-  production data contract; their repository methods and Supabase Auth cutover require
-  a separate staging validation.
+- The normalized commerce, inventory, compliance, and delivery tables are now seeded
+  as the production data contract. `pnpm normalized:check` validates their typed
+  read projections against a configured Supabase project, while
+  `pnpm normalized:mutation:check` exercises the server-only transaction contract
+  and restores its temporary test data on completion. The HTTP adapter cutover still
+  requires separate staging validation before replacing the snapshot adapter.
 - Paystack initialization and verification are deterministic test adapters until live
   test credentials are configured.
 - The route map is seeded and fictional; the drone control surface is a digital twin.

@@ -9,10 +9,10 @@ Date: 2026-08-30
 | --- | --- | --- |
 | 0 | Product, architecture, workstream, brand, and runbook documents | Founder approval remains an external gate |
 | 1 | Next.js 16 App Router shell, TypeScript, lint, typecheck, tests, CI, responsive/accessible UI | Private repository/deployment setup is external |
-| 2 | Supabase foundation plus completion migration, seed, RLS policy contract, explicit grants, generated database types, SSR/browser factories, server-controlled demo roles | Docker is required to execute remote-equivalent auth/advisor checks |
+| 2 | Supabase foundation plus completion migration, normalized seed fixtures, private `rgd-certs` bucket, RLS policy contract, explicit grants, generated database types, SSR/browser factories, server-controlled demo roles | Docker is required to execute remote-equivalent auth/advisor checks |
 | 3 | Ghana/Nigeria catalogue, four categories, provenance classes, local prices, roadmap market horizon | Only active markets are transaction-enabled |
 | 4 | Server-owned cart quote, validated Nigerian delivery-address snapshot, Paystack-shaped deterministic test adapter, optional real Paystack test calls, verification, HMAC webhook, duplicate protection, route-level idempotency keys | No live money or callback-based payment authority |
-| 5 | Paid-order FEFO, expired/quarantine rejection, warehouse task progression, shared order timeline, optional private Realtime subscription with refetch fallback, server-only Supabase snapshot persistence, idempotency records, and audit writes | Normalized production repository methods remain follow-up work |
+| 5 | Paid-order FEFO, expired/quarantine rejection, warehouse task progression, shared order timeline, optional private Realtime subscription with refetch fallback, server-only Supabase snapshot persistence, typed normalized read projections, server-only transactional normalized mutations, idempotency records, and audit writes | HTTP adapter cutover and staging validation remain follow-up work |
 | 6 | Ghana-to-Nigeria transfer evidence, origin rule evaluator, provisional assessment snapshot linked to the order and shipment, watermarked certificate preview | Evidence and duty treatment are illustrative |
 | 7 | Shipment and delivery-leg lifecycle, static route fallback, optional Mapbox static route rendering, explicit preflight/clear/launch/en-route lifecycle, deterministic telemetry playback, weather lockout, courier fallback | No live route planning or aircraft |
 | 8 | Curation explanation, B2B preview, ratings/return-review session actions, roadmap explorer | No refunds, marketplace settlement, registry, or production AI |
@@ -53,6 +53,14 @@ does not call Paystack or mutate external services.
 - `pnpm env:check` validates mode-dependent configuration without printing secret values.
 - `pnpm staging:check` performs read-only full Supabase REST-schema/seed and Mapbox
   checks when staging mode is explicitly enabled, and rejects default access secrets.
+- `GET /api/health` is a public, secret-free readiness check for deployment probes;
+  it reports adapter mode without returning credentials or user data.
+- `pnpm deployment:check` verifies a configured HTTPS deployment’s readiness and
+  access gate without logging response secrets.
+- `pnpm normalized:check` exercises the typed normalized catalogue and scoped
+  operational repository against configured Supabase data.
+- `pnpm normalized:mutation:check` exercises the server-only normalized deep-order
+  transaction contract against a local Supabase database.
 - `pnpm bundle:check` scans the built browser assets for server-only secret references
   and common secret-value formats.
 - `pnpm api:acceptance` boots the built app with deterministic adapters and verifies the
@@ -62,9 +70,11 @@ does not call Paystack or mutate external services.
 
 ## Deferred production work
 
-Before staging, validate the Supabase snapshot adapter against the intended project, run
-migrations and advisors with Docker, configure a URL-restricted Mapbox token, validate
-Paystack test credentials and webhook delivery, add observability, and perform a separate
-deployment approval. No production secret is required for the deterministic local demo.
+Before staging, validate the Supabase snapshot adapter, normalized read and mutation
+projections, and Auth identities against the intended project, then cut the HTTP
+adapter over behind the staging gate. Run migrations and advisors with Docker,
+configure a URL-restricted Mapbox token, validate Paystack test credentials and
+webhook delivery, add external metrics/traces, and perform a separate deployment
+approval. No production secret is required for the deterministic local demo.
 Production mode also fails closed unless Supabase, Paystack, Mapbox, HTTPS app URL, and
 non-default demo access/session secrets are configured.
