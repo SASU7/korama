@@ -136,7 +136,7 @@ export default function PrototypeWorkspace({ initialRole = "consumer" }: { initi
     setError("");
     try { await refresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : "The demo state could not be refreshed"); }
   }
-  async function reset() { await mutate("/api/demo/reset", { method: "POST", headers: { "x-korama-demo-code": "KORAMA-DEMO" } }, "Demo reset to the canonical Ghana → Nigeria scenario."); }
+  async function reset() { await mutate("/api/demo/reset", { method: "POST" }, "Demo reset to the canonical Ghana → Nigeria scenario."); }
   async function switchRole(nextRole: UserRole) {
     setError("");
     if (!navigator.onLine) { setError("You are offline. Reconnect before switching identities."); return; }
@@ -163,7 +163,7 @@ export default function PrototypeWorkspace({ initialRole = "consumer" }: { initi
       <div className="brand-lockup"><span className="brand-mark">K</span><span>KORAMA</span></div>
       <div className="workspace-context"><span className="context-dot" /> Private demo · Ghana + Nigeria <span className="sync-status">{syncStatus === "realtime" ? "Realtime" : syncStatus === "polling" ? "Refetch fallback" : "Local adapter"}</span></div>
       <div className="workspace-actions">
-        <button type="button" className="reset-button" onClick={reset} disabled={busy} aria-busy={busy}><RefreshCw size={14} aria-hidden="true" /> Reset scenario</button>
+        <button type="button" className="reset-button" onClick={reset} disabled={busy || role !== "warehouse_operator"} aria-busy={busy} title={role === "warehouse_operator" ? "Reset the guided demo scenario" : "Switch to Warehouse + compliance to reset the scenario"}><RefreshCw size={14} aria-hidden="true" /> Reset scenario</button>
         <div className="role-switch"><button ref={roleButtonRef} type="button" className="role-button" onClick={() => setRoleOpen((open) => !open)} disabled={busy} aria-busy={busy} aria-expanded={roleOpen} aria-haspopup="menu" aria-controls="role-menu"><span className="avatar">{role === "consumer" ? "NC" : role === "warehouse_operator" ? "OP" : "SO"}</span><span className="role-copy"><strong>{roleLabels[role]}</strong><small>Server-guided identity</small></span><ChevronDown size={16} aria-hidden="true" /></button>{roleOpen && <div ref={roleMenuRef} id="role-menu" className="role-menu workspace-role-menu" role="menu" aria-label="Guided identities" onKeyDown={handleRoleMenuKeyDown}><p>Actions are scoped to the selected guided identity.</p>{(Object.keys(roleLabels) as UserRole[]).map((key) => <button type="button" role="menuitem" key={key} disabled={busy} onClick={() => switchRole(key)}>{roleLabels[key]} {role === key && "✓"}</button>)}</div>}</div>
       </div>
     </header>

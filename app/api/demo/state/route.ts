@@ -1,4 +1,4 @@
-import { demoStore } from "@/lib/demo-store";
+import { hydrateDemoStore } from "@/lib/demo-store";
 import { requireDemoSession } from "@/lib/demo-auth";
 
-export function GET(request: Request) { try { requireDemoSession(request); return Response.json(demoStore()); } catch (error) { return error instanceof Response ? error : Response.json({ error: "Demo session required" }, { status: 401 }); } }
+export async function GET(request: Request) { try { requireDemoSession(request); return Response.json(await hydrateDemoStore()); } catch (error) { return error instanceof Response ? error : Response.json({ error: error instanceof Error ? error.message : "Demo session required" }, { status: 401 }); } }

@@ -1,8 +1,9 @@
-import { resetDemoStore } from "@/lib/demo-store";
-import { configuredAccessCode, hasValidSession, sessionCookie } from "@/lib/demo-auth";
+import { recordDemoAudit, resetPersistedDemoStore } from "@/lib/demo-store";
+import { sessionCookie, unauthorizedUnlessAuthenticatedRole } from "@/lib/demo-auth";
 
 export async function POST(request: Request) {
-  const code = request.headers.get("x-korama-demo-code");
-  if (!hasValidSession(request) && code?.toUpperCase() !== configuredAccessCode().toUpperCase()) return Response.json({ error: "Demo reset requires an authenticated session" }, { status: 403 });
-  return Response.json(resetDemoStore(), { headers: { "set-cookie": sessionCookie() } });
+  const unauthorized = await unauthorizedUnlessAuthenticatedRole(request, ["warehouse_operator"]); if (unauthorized) return unauthorized;
+  const state = await resetPersistedDemoStore();
+  await recordDemoAudit("demo_reset", "demo_state", { status: "reset" });
+  return Response.json(state, { headers: { "set-cookie": sessionCookie() } });
 }

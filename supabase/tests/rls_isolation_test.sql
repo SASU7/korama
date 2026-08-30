@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(9);
 
 insert into auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data) values
   ('51000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'consumer@example.test', '{}'::jsonb, '{}'::jsonb),
@@ -36,6 +36,8 @@ select is((select count(*)::int from public.audit_events), 0, 'audit events rema
 select is((select count(*)::int from public.payment_attempts), 0, 'payment attempts remain server-only');
 select throws_ok($$insert into public.role_assignments (profile_id, role) values ('51000000-0000-0000-0000-000000000003', 'administrator')$$, '42501', null, 'authenticated users cannot self-assign roles');
 select is((select count(*)::int from public.market_listings), 10, 'authenticated users can browse seeded listings');
+select throws_ok($$select count(*)::int from public.demo_state_snapshots$$, '42501', null, 'authenticated users cannot read the server-only demo snapshot');
+select throws_ok($$insert into public.demo_state_snapshots (id, payload) values ('korama-demo', '{}'::jsonb)$$, '42501', null, 'authenticated users cannot write the server-only demo snapshot');
 
 reset role;
 delete from public.orders where id = '52000000-0000-0000-0000-000000000001';

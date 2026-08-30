@@ -1,4 +1,4 @@
-import { verifyDemoPayment } from "@/lib/demo-store";
+import { hydrateDemoStore, persistDemoStore, recordDemoAudit, verifyDemoPayment } from "@/lib/demo-store";
 import { apiError } from "@/lib/api";
 import { unauthorizedUnlessSession } from "@/lib/demo-auth";
 
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const reference = url.searchParams.get("reference") ?? "PSK-DEMO-KOR-NG-240829-001";
-    const state = (await import("@/lib/demo-store")).demoStore();
+    const state = await hydrateDemoStore();
     if (!state.order) throw new Error("No pending order exists");
     let amount = state.order.totalMinor;
     let currency = state.order.currency;
@@ -20,6 +20,8 @@ export async function GET(request: Request) {
       currency = state.order.currency;
     }
     const order = verifyDemoPayment(reference, amount, currency);
+    await persistDemoStore();
+    await recordDemoAudit("payment_verified", "order", { reference: order.reference, paymentReference: reference, amount, currency });
     return Response.json({ verified: true, order, serverChecked: true });
   } catch (error) { return apiError(error, request); }
 }

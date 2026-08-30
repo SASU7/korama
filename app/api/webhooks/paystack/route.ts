@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
-import { verifyDemoPayment } from "@/lib/demo-store";
-import { demoStore } from "@/lib/demo-store";
+import { hydrateDemoStore, persistDemoStore, recordDemoAudit, verifyDemoPayment } from "@/lib/demo-store";
 
 export async function POST(request: Request) {
   try {
@@ -11,7 +10,7 @@ export async function POST(request: Request) {
     if (!signature || !createHmac("sha512", secret).update(rawBody).digest().equals(Buffer.from(signature, "hex"))) return Response.json({ error: "Invalid webhook signature" }, { status: 401 });
     const body = JSON.parse(rawBody) as Record<string, unknown>;
     const data = (body.data ?? {}) as Record<string, unknown>;
-    const state = demoStore();
+    const state = await hydrateDemoStore();
     if (!state.order) throw new Error("No pending order exists");
     const alreadyPaid = state.order.status !== "pending_payment";
     if (body.event !== "charge.success" || data.status !== "success") throw new Error("Only successful Paystack charge events are accepted");
@@ -20,6 +19,8 @@ export async function POST(request: Request) {
     const currency = String(data.currency ?? "").trim().toUpperCase();
     if (!reference || !Number.isFinite(amount) || !currency) throw new Error("Successful Paystack events must include reference, amount, and currency");
     const order = verifyDemoPayment(reference, amount, currency);
+    await persistDemoStore();
+    await recordDemoAudit("payment_webhook_received", "order", { reference: order.reference, paymentReference: reference, amount, currency });
     return Response.json({ received: true, idempotent: alreadyPaid, serverSignatureVerified: signature === expected, order });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unexpected webhook error" }, { status: 400 }); }
 }

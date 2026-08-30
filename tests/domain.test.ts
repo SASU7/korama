@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { configuredAccessCode, currentRole, hasValidSession, roleCookie, sessionCookie, sessionToken } from "../lib/demo-auth.ts";
 import { allocateFefo, assessOrigin, calculateQuote, markOrder, normalizeQuantity, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress } from "../lib/domain.ts";
 
 test("the seed contains the two-way catalogue and a roadmap listing", () => {
@@ -99,4 +100,22 @@ test("quantity validation rejects malformed or out-of-range quantities", () => {
   assert.equal(normalizeQuantity("3"), 3);
   assert.throws(() => normalizeQuantity("not-a-number"), /whole number/);
   assert.throws(() => normalizeQuantity(11), /between 1 and 10/);
+});
+
+test("demo auth uses runtime secrets and rejects forged guided roles", () => {
+  const previousCode = process.env.KORAMA_DEMO_ACCESS_CODE;
+  const previousSecret = process.env.KORAMA_DEMO_SESSION_SECRET;
+  process.env.KORAMA_DEMO_ACCESS_CODE = "RUNTIME-ACCESS-CODE";
+  process.env.KORAMA_DEMO_SESSION_SECRET = "runtime-session-secret-for-tests-32";
+  try {
+    assert.equal(configuredAccessCode(), "RUNTIME-ACCESS-CODE");
+    const request = new Request("http://localhost", { headers: { cookie: `${sessionCookie().split(";", 1)[0]}; ${roleCookie("warehouse_operator").split(";", 1)[0]}` } });
+    assert.equal(hasValidSession(request), true);
+    assert.equal(currentRole(request), "warehouse_operator");
+    assert.match(sessionToken(), /^[a-f0-9]{64}$/);
+    assert.equal(currentRole(new Request("http://localhost", { headers: { cookie: `${sessionCookie().split(";", 1)[0]}; korama_demo_role=warehouse_operator` } })), "consumer");
+  } finally {
+    if (previousCode === undefined) delete process.env.KORAMA_DEMO_ACCESS_CODE; else process.env.KORAMA_DEMO_ACCESS_CODE = previousCode;
+    if (previousSecret === undefined) delete process.env.KORAMA_DEMO_SESSION_SECRET; else process.env.KORAMA_DEMO_SESSION_SECRET = previousSecret;
+  }
 });

@@ -22,6 +22,7 @@ The canonical presenter flow is:
 
 ```bash
 pnpm env:check
+pnpm staging:check
 pnpm lint
 pnpm typecheck
 pnpm test
@@ -40,6 +41,11 @@ After `pnpm build`, `pnpm api:acceptance` starts the production server with dete
 adapters and verifies the cross-role access, payment idempotency, FEFO, fulfilment, and
 drone lifecycle contracts over HTTP.
 
+To verify the optional persistence path against local Supabase, export the local CLI
+credentials, set `KORAMA_USE_SUPABASE=true`, and run the acceptance harness twice; set
+`KORAMA_EXPECT_PERSISTED=true` on the second run to assert the state was loaded after the
+first server process exited.
+
 `lib/supabase/database.types.ts` is generated from the local schema after migrations
 stabilize. `pnpm migration:check` statically verifies that the migration contains the core tables,
 RLS markers, guided-role policies, and unique index names. Full `supabase db lint` and
@@ -50,6 +56,12 @@ With Docker available, `pnpm db:test` runs the pgTAP isolation suite. It verifie
 consumer ownership, operating-company staff scope, server-only payment/audit tables,
 listing access, and that authenticated users cannot self-assign roles.
 
+Mutating quote, payment-initialize, fulfilment, order-advance, and sortie-command
+requests accept an optional `Idempotency-Key`. Reusing a key for the same operation
+returns the original response; reusing it for another operation is rejected.
+Supabase-backed transitions also write server-only audit records tagged to the demo
+source; the acceptance harness checks that audit persistence is available.
+
 For a configured Supabase project, set the service-role key and a temporary seed
 password, then run `pnpm auth:bootstrap`. This creates or updates the three guided
 identities and their server-side profile/role assignments. Never put the service-role
@@ -58,6 +70,10 @@ key or seed password in the repository or browser environment.
 The guided-role cookie is signed by `KORAMA_DEMO_SESSION_SECRET`; production mode
 requires that secret and a non-default access code. `pnpm env:check` fails closed when
 production adapter credentials or access-security settings are missing.
+
+`pnpm staging:check` is opt-in: it performs read-only checks against the configured
+Supabase REST endpoint and Mapbox style endpoint only when `KORAMA_STAGING=true` or
+`KORAMA_PRODUCTION=true`.
 
 ## External services
 
@@ -69,15 +85,20 @@ accessible static route preview remains active. No live flight or route planning
 
 ## Reset and safety
 
-Reset uses `POST /api/demo/reset` with the `x-korama-demo-code: KORAMA-DEMO` header.
-It resets only local demo state and does not touch external Paystack transactions.
+Reset uses `POST /api/demo/reset` while the signed `Warehouse + compliance` guided
+identity is active. The legacy demo-code header is ignored for authorization. It resets
+only selected local adapter state and does not touch external Paystack transactions.
 The Supabase migration requires RLS, explicit grants, scoped staff policies, private
 security-definer helpers, and immutable audit/idempotency foundations.
 
 ## Known prototype boundaries
 
-- The local demo store is not production persistence; connect the Supabase adapter
-  before staging.
+- The default local demo store is in-memory. Set `KORAMA_USE_SUPABASE=true` only with
+  the intended project and server-only service-role credentials; this persists the
+  current investor journey as a server-only aggregate snapshot.
+- The normalized commerce, inventory, compliance, and delivery tables remain the
+  production data contract; their repository methods and Supabase Auth cutover require
+  a separate staging validation.
 - Paystack initialization and verification are deterministic test adapters until live
   test credentials are configured.
 - The route map is seeded and fictional; the drone control surface is a digital twin.

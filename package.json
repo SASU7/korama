@@ -16,7 +16,9 @@
     "api:acceptance": "node scripts/api-acceptance.mjs",
     "db:test": "supabase test db --local",
     "auth:bootstrap": "node scripts/bootstrap-identities.mjs",
-    "env:check": "node scripts/check-env.mjs"
+    "env:check": "node scripts/check-env.mjs",
+    "staging:check": "node scripts/staging-preflight.mjs",
+    "bundle:check": "node scripts/client-bundle-check.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

@@ -18,10 +18,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:check
+      - run: pnpm staging:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm smoke
       - run: pnpm migration:check
       - run: pnpm build
+      - run: pnpm bundle:check
       - run: pnpm api:acceptance

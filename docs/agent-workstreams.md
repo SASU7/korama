@@ -77,7 +77,7 @@ authentication, payment transitions, and RLS have one designated owner at a time
 - The integrated demo keeps catalogue, payment, warehouse, compliance, and drone logic behind shared server contracts.
 - No secret is committed; environment validation reports missing configuration safely.
 - `supabase db lint --local --fail-on error` passes after a clean reset and seed.
-- `pnpm db:test` passes the seven-case RLS isolation suite.
+- `pnpm db:test` passes the nine-case RLS isolation suite.
 
 Remote staging, service credentials, observability, and founder release approval remain
 external gates. The detailed current boundary is recorded in `docs/as-built.md`.

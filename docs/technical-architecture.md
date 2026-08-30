@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Technical Architecture
 
-Status: As-built deterministic prototype; production adapters pending  
+Status: As-built deterministic prototype with optional Supabase snapshot persistence; production adapters pending
 Date: 2026-08-30
 
 ## 1. Architecture shape
@@ -33,7 +33,9 @@ Secrets remain server-only. Browser code can receive sanitized, role-scoped view
 models but never service keys, webhook secrets, reset authority, or privileged claims.
 The repository includes optional `@supabase/ssr` server and browser factories; they
 return no client until the public URL and anon key are configured. The deterministic
-demo store remains the local fallback until the approved Supabase environment exists.
+demo store remains the local fallback. When `KORAMA_USE_SUPABASE=true`, the server-only
+service-role adapter persists the current investor journey in a revisioned aggregate
+snapshot protected by RLS; browser clients never receive that key.
 
 ## 3. Data model contract
 
@@ -87,8 +89,10 @@ Sortie:    draft → preflight → cleared → launched → en_route → deliver
                     ↘ lockout / override / abort / return / courier_fallback
 ```
 
-Every transition is a validated server operation that writes an audit event and is
-safe to retry with an idempotency key.
+Every selected-adapter transition writes a server-side audit event when Supabase is
+enabled and accepts an idempotency key where the route mutates state. The snapshot
+adapter preserves the visible timeline, revision guard, and idempotency records;
+normalized repository methods remain a staging follow-up.
 
 ## 6. HTTP contracts
 
@@ -98,10 +102,10 @@ safe to retry with an idempotency key.
 - `POST /api/webhooks/paystack`
 - `POST /api/demo/reset` (shared demo-code protected reset)
 - `GET /api/demo/state` (sanitized deterministic demo view)
-- `GET /api/orders/:reference` (planned Supabase-backed owner/staff view)
-- `POST /api/fulfilment/orders/:reference/allocate` (demo adapter; Supabase transition planned)
-- `POST /api/orders/:reference/advance` (demo adapter; Supabase transition planned)
-- `POST /api/delivery/sorties/:reference/command` (demo adapter; returns updated sortie, order, and shipment/delivery-leg snapshots)
+- `GET /api/orders/:reference` (session-scoped view from the selected adapter)
+- `POST /api/fulfilment/orders/:reference/allocate` (selected adapter; FEFO transition)
+- `POST /api/orders/:reference/advance` (selected adapter; order transition)
+- `POST /api/delivery/sorties/:reference/command` (selected adapter; returns updated sortie, order, and shipment/delivery-leg snapshots)
 
 Payment initialization recalculates totals server-side. Callback visits never mark an
 order paid. Webhooks validate raw-body HMAC, match amount/currency/reference, and are
@@ -138,12 +142,14 @@ No production secrets belong in the repository or browser bundle.
 
 ## 10. Current implementation boundary
 
-The repository includes a deterministic demo adapter for the full investor flow:
+The repository includes a deterministic demo adapter for the full investor flow and an
+optional server-only Supabase snapshot adapter for the same contracts:
 catalogue/provenance, server-quoted checkout, test payment verification, FEFO, order
 advancement, origin evidence, watermarked certificate preview, drone gates, telemetry,
-weather lockout, courier fallback, shallow capability actions, and role-scoped HTTP
-contracts. The client uses private Supabase Realtime subscriptions when configured,
+weather lockout, courier fallback, route-level idempotency keys, shallow capability
+actions, and role-scoped HTTP contracts. The client uses private Supabase Realtime subscriptions when configured,
 falls back to periodic refetching, and uses Mapbox for the seeded route when a public
-token is configured. Supabase persistence, observability, and deployment credentials
-remain isolated follow-up adapters before staging. The local demo adapter is intentionally
-explicit so it cannot be mistaken for production.
+token is configured. Normalized repository methods, observability, and deployment
+credentials remain isolated follow-up work before staging. Both adapters are explicitly
+labelled so snapshot persistence cannot be mistaken for a fully migrated production
+domain implementation.

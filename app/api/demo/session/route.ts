@@ -1,3 +1,3 @@
-import { currentRole, hasValidSession } from "@/lib/demo-auth";
+import { authenticatedRole, hasValidSession } from "@/lib/demo-auth";
 
-export function GET(request: Request) { const authenticated = hasValidSession(request); return Response.json({ authenticated, role: authenticated ? currentRole(request) : null }); }
+export async function GET(request: Request) { const authenticated = hasValidSession(request); return Response.json({ authenticated, role: authenticated ? await authenticatedRole(request) : null }); }

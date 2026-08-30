@@ -21,7 +21,9 @@ pnpm smoke
 pnpm migration:check
 pnpm api:acceptance
 pnpm db:test
+pnpm staging:check
 pnpm build
+pnpm bundle:check
 ```
 
 ## Repository map
@@ -29,9 +31,12 @@ pnpm build
 - `app/` — Next.js App Router shell and API routes.
 - `components/PrototypeWorkspace.tsx` — shopper, operations, compliance, delivery, and market surfaces.
 - `lib/domain.ts` — shared state machines, seed scenario, quote, FEFO, and safety rules.
-- `lib/demo-store.ts` — server-owned deterministic test adapter.
+- `lib/demo-store.ts` — server-owned deterministic adapter with optional Supabase snapshot persistence.
 - `supabase/` — local migration, seed, private helper, RLS, index, and storage contracts.
 - `docs/` — product specification, architecture, workstreams, and runbook.
 - `docs/as-built.md` — verified implementation boundary and production handoff.
 
-The local demo adapter is intentionally not production persistence. Connect the Supabase adapter and real Paystack/Mapbox credentials only after local migration review and the approval gates in the plan.
+The default local demo uses the deterministic in-memory adapter. Set `KORAMA_USE_SUPABASE=true`
+with server-only Supabase credentials to persist the current investor journey; normalized
+production repository modules and real Paystack/Mapbox credentials still require the
+approval gates in the plan.

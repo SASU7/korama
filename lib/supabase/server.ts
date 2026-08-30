@@ -2,9 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/lib/supabase/database.types";
 
+function runtimeEnv(name: string) { return globalThis.process?.env?.[name]; }
 function config() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = runtimeEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const key = runtimeEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   return url && key ? { url, key } : null;
 }
 

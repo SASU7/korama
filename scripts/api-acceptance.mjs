@@ -67,8 +67,18 @@ try {
   assert.equal(result.body.role, "consumer", "unsigned guided-role cookies must be ignored");
   cookies.delete("korama_demo_role");
 
+  result = await request("/api/demo/reset", { method: "POST", headers: { "x-korama-demo-code": "KORAMA-DEMO" } });
+  assert.equal(result.response.status, 403, "consumers cannot reset the demo scenario");
+  result = await request("/api/demo/identity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "warehouse_operator" }) });
+  assert.equal(result.response.status, 200);
+  result = await request("/api/demo/reset", { method: "POST", headers: { "x-korama-demo-code": "KORAMA-DEMO" } });
+  assert.equal(result.response.status, 200, "warehouse identity can reset the demo scenario");
+  result = await request("/api/demo/identity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "consumer" }) });
+  assert.equal(result.response.status, 200);
+
   result = await request("/api/demo/state");
   const products = result.body.products;
+  if (process.env.KORAMA_EXPECT_PERSISTED === "true") assert.notEqual(result.body.lastMutation, "2026-08-29T10:00:00.000Z", "Supabase-backed state must survive a server restart");
   assert.ok(products.some((product) => product.market === "NG" && product.origin === "ghana_origin_export" && product.purchasable), "Nigeria must expose purchasable Ghana-origin stock");
   assert.ok(products.some((product) => product.market === "NG" && product.origin === "direct_import" && !/through Ghana|Ghana-routed/i.test(product.description)), "Nigeria must expose a direct-import comparison without Ghana routing");
   assert.ok(products.some((product) => product.origin === "marketplace_future" && !product.purchasable), "roadmap marketplace inventory must remain gated");
@@ -114,9 +124,13 @@ try {
   result = await request("/api/demo/identity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "warehouse_operator" }) });
   assert.equal(result.response.status, 200);
   const orderReference = result.body.order?.reference ?? result.body.reference ?? "KOR-NG-240829-001";
-  result = await request(`/api/fulfilment/orders/${orderReference}/allocate`, { method: "POST" });
+  const allocationKey = `allocation-${Date.now()}`;
+  result = await request(`/api/fulfilment/orders/${orderReference}/allocate`, { method: "POST", headers: { "idempotency-key": allocationKey } });
   assert.equal(result.response.status, 200, "warehouse identity must allocate paid stock");
   assert.equal(result.body.batch.batch, "NK-SB-2407", "FEFO must select the earliest valid batch");
+  result = await request(`/api/fulfilment/orders/${orderReference}/allocate`, { method: "POST", headers: { "idempotency-key": allocationKey } });
+  assert.equal(result.response.status, 200, "duplicate allocation must return the original result");
+  assert.equal(result.body.batch.allocated, 1, "duplicate allocation must not reserve another unit");
 
   result = await request("/api/demo/identity", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "safety_officer" }) });
   assert.equal(result.response.status, 200);
@@ -164,6 +178,16 @@ try {
   assert.equal(result.body.shipment, null, "a fresh order must not inherit the previous shipment");
   assert.equal(result.body.tasks[1].done, false, "a fresh order must reset warehouse tasks");
   assert.equal(result.body.batches.find((batch) => batch.batch === "NK-SB-2407").allocated, 0, "a fresh order must reset inventory allocations");
+
+  if (["1", "true", "yes"].includes((process.env.KORAMA_USE_SUPABASE ?? "").toLowerCase())) {
+    const auditUrl = new URL("/rest/v1/audit_events", process.env.NEXT_PUBLIC_SUPABASE_URL);
+    auditUrl.searchParams.set("select", "id");
+    auditUrl.searchParams.set("payload->>source", "eq.korama-demo");
+    auditUrl.searchParams.set("limit", "1");
+    const auditResponse = await fetch(auditUrl, { headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } });
+    assert.equal(auditResponse.status, 200, "Supabase service role must read demo audit records");
+    assert.ok((await auditResponse.json()).length > 0, "Supabase adapter must record audit events");
+  }
 
   console.log("api acceptance pass: access, payment idempotency, role isolation, FEFO, fulfilment, and drone lifecycle");
 } catch (error) {
