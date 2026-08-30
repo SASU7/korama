@@ -1,5 +1,4 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const DEMO_COOKIE = "korama_demo_session";
 export const ROLE_COOKIE = "korama_demo_role";
@@ -43,6 +42,7 @@ export function currentRole(request: Request): GuidedRole {
 export function unauthorizedUnlessRole(request: Request, roles: Array<"consumer" | "warehouse_operator" | "safety_officer">) { const unauthorized = unauthorizedUnlessSession(request); if (unauthorized) return unauthorized; return roles.includes(currentRole(request) as "consumer" | "warehouse_operator" | "safety_officer") ? null : Response.json({ error: "This guided identity does not have permission for that surface" }, { status: 403 }); }
 export async function authenticatedRole(request: Request): Promise<GuidedRole | null> {
   if (!supabaseAuthEnabled()) return currentRole(request);
+  const { createSupabaseServerClient } = await import("@/lib/supabase/server");
   const client = await createSupabaseServerClient();
   if (!client) return null;
   const { data: { user }, error: userError } = await client.auth.getUser();
