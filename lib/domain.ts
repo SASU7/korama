@@ -37,17 +37,22 @@ export type Batch = {
 };
 
 export type OrderEvent = { status: OrderStatus; label: string; detail: string; at: string; complete: boolean };
+export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "NG" };
 export type TransferStep = { label: string; detail: string; complete: boolean };
-export type ComplianceState = { assessment: "provisionally_eligible"; evidence: string[]; transformation: string; dutyQuote: string; certificateWatermark: string };
+export type ComplianceSnapshot = { assessment: "provisionally_eligible"; evidence: string[]; transformation: string; dutyQuote: string; certificateWatermark: string };
+export type ComplianceState = ComplianceSnapshot;
 export type Gate = { key: string; label: string; detail: string; passed: boolean; severity?: "warning" | "danger" };
 export type Sortie = { status: SortieStatus; weather: "clear" | "unsafe"; telemetry: { point: string; altitude: number; speed: number; battery: number; link: string }[]; gates: Gate[]; fallbackReason?: string };
 export type OriginAssessment = { status: "provisionally_eligible" | "rejected"; reason: string };
+export type DeliveryLeg = { sequenceNo: number; mode: "simulated_drone" | "ground_courier"; origin: string; destination: string; status: "planned" | "in_transit" | "complete" | "fallback" };
+export type Shipment = { reference: string; status: "planned" | "in_transit" | "delivered" | "fallback"; legs: DeliveryLeg[]; compliance?: ComplianceSnapshot };
 
 export type DemoState = {
   products: Product[];
   selectedProductId: string;
   cart: { productId: string; quantity: number }[];
-  order: { reference: string; status: OrderStatus; productId: string; quantity: number; subtotalMinor: number; taxMinor: number; deliveryMinor: number; totalMinor: number; currency: "NGN"; paymentReference?: string } | null;
+  order: { reference: string; status: OrderStatus; productId: string; quantity: number; subtotalMinor: number; taxMinor: number; deliveryMinor: number; totalMinor: number; currency: "NGN"; address?: DeliveryAddress; compliance?: ComplianceSnapshot; paymentReference?: string } | null;
+  shipment: Shipment | null;
   orderEvents: OrderEvent[];
   batches: Batch[];
   transfer: TransferStep[];
@@ -89,6 +94,7 @@ export const seedDemoState = (): DemoState => {
     selectedProductId: "shea-balm",
     cart: [],
     order: null,
+    shipment: null,
     orderEvents: initialEvents,
     batches: [
       { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Lekki warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true },
@@ -123,6 +129,23 @@ export const seedDemoState = (): DemoState => {
 };
 
 export function getProduct(state: DemoState, id = state.selectedProductId) { return state.products.find((product) => product.id === id) ?? state.products[0]; }
+export function validateDeliveryAddress(value: unknown): DeliveryAddress {
+  const input = (value ?? {}) as Record<string, unknown>;
+  const recipientName = String(input.recipientName ?? "").trim();
+  const addressLine = String(input.addressLine ?? "").trim();
+  const city = String(input.city ?? "").trim();
+  const countryCode = String(input.countryCode ?? "NG").trim().toUpperCase();
+  if (recipientName.length < 2) throw new Error("Enter the recipient name");
+  if (addressLine.length < 5) throw new Error("Enter a delivery address");
+  if (city.length < 2) throw new Error("Enter the delivery city");
+  if (countryCode !== "NG") throw new Error("The demo checkout is scoped to Nigeria");
+  return { recipientName, addressLine, city, countryCode: "NG" };
+}
+export function normalizeQuantity(value: unknown): number {
+  const quantity = Number(value ?? 1);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) throw new Error("Quantity must be a whole number between 1 and 10");
+  return quantity;
+}
 export function formatMoney(value: number, currency: string) { return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-GH", { style: "currency", currency, maximumFractionDigits: 0 }).format(value / 100); }
 export function calculateQuote(state: DemoState, productId: string, quantity: number) {
   const product = getProduct(state, productId);
@@ -131,6 +154,7 @@ export function calculateQuote(state: DemoState, productId: string, quantity: nu
   const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
   return { subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, currency: "NGN" as const };
 }
+function copyComplianceSnapshot(value: ComplianceSnapshot): ComplianceSnapshot { return { ...value, evidence: [...value.evidence] }; }
 export function assessOrigin(transformation: string, evidence: string[]): OriginAssessment {
   const normalizedTransformation = transformation.toLowerCase();
   const repackagingOnly = /repackag|relabel|label only|labelled only/.test(normalizedTransformation) && !/blend|process|ferment|roast|mill|weav|sew|fill|manufactur/.test(normalizedTransformation);
@@ -150,6 +174,17 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   const allowed: Record<OrderStatus, OrderStatus | null> = { pending_payment: "paid", paid: "allocated", allocated: "picked", picked: "packed", packed: "dispatched", dispatched: "delivered", delivered: null };
   if (allowed[state.order.status] !== status) throw new Error(`Order cannot advance from ${state.order.status} to ${status}`);
   state.order.status = status;
+  if (status === "packed" && !state.shipment) {
+    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "planned" }], compliance: state.order.compliance ? copyComplianceSnapshot(state.order.compliance) : undefined };
+  }
+  if (status === "dispatched" && state.shipment) {
+    state.shipment.status = "in_transit";
+    state.shipment.legs = state.shipment.legs.map((leg) => leg.status === "planned" ? { ...leg, status: "in_transit" } : leg);
+  }
+  if (status === "delivered" && state.shipment) {
+    state.shipment.status = "delivered";
+    state.shipment.legs = state.shipment.legs.map((leg) => leg.mode === "simulated_drone" ? { ...leg, status: "complete" } : leg);
+  }
   const event = state.orderEvents.find((item) => item.status === status);
   if (event) { event.complete = true; event.at = stamp(); }
   state.lastMutation = stamp();
@@ -169,12 +204,26 @@ export function buildTelemetry() { return [
   { point: "Coastal waypoint", altitude: 96, speed: 39, battery: 79, link: "Strong" },
   { point: "Fictional micro-hub", altitude: 0, speed: 0, battery: 71, link: "Strong" },
 ]; }
-export function sortieCommand(state: DemoState, command: "preflight" | "launch" | "inject_weather" | "reset_weather" | "fallback" | "complete") {
-  if (command === "inject_weather") { state.sortie.weather = "unsafe"; state.sortie.status = "lockout"; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: false, detail: "Unsafe weather injected · flight locked out", severity: "danger" } : gate); state.sortie.fallbackReason = "Unsafe weather automatically created a ground-courier leg"; return; }
-  if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below demo threshold", severity: undefined } : gate); return; }
-  if (command === "fallback") { state.sortie.status = "courier_fallback"; state.sortie.fallbackReason = "Manual override requested a ground-courier handover"; return; }
+export type SortieCommand = "preflight" | "launch" | "advance" | "inject_weather" | "reset_weather" | "fallback" | "complete";
+
+function setCourierFallback(state: DemoState) {
+  if (!state.shipment) return;
+  const existingCourierLeg = state.shipment.legs.find((leg) => leg.mode === "ground_courier");
+  state.shipment.status = "fallback";
+  state.shipment.legs = [
+    ...state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "fallback" as const })),
+    existingCourierLeg ? { ...existingCourierLeg, status: "in_transit" as const } : { sequenceNo: state.shipment.legs.length + 1, mode: "ground_courier" as const, origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" as const },
+  ];
+}
+
+export function sortieCommand(state: DemoState, command: SortieCommand) {
+  if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "complete"].includes(command)) throw new Error("Unsupported sortie command");
+  if (!["reset_weather"].includes(command) && (!state.order || state.order.status !== "dispatched")) throw new Error("Delivery controls unlock after the order is dispatched");
+  if (command === "inject_weather") { state.sortie.weather = "unsafe"; state.sortie.status = "lockout"; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: false, detail: "Unsafe weather injected · flight locked out", severity: "danger" } : gate); state.sortie.fallbackReason = "Unsafe weather automatically created a ground-courier leg"; setCourierFallback(state); return; }
+  if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.telemetry = []; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below demo threshold", severity: undefined } : gate); if (state.shipment) { state.shipment.status = "in_transit"; state.shipment.legs = state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "in_transit" })); } return; }
+  if (command === "fallback") { state.sortie.status = "courier_fallback"; state.sortie.fallbackReason = "Manual override requested a ground-courier handover"; setCourierFallback(state); return; }
   if (command === "complete") { if (state.sortie.status !== "en_route") throw new Error("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
-  if (command === "preflight") { state.sortie.status = "preflight"; if (state.sortie.gates.some((gate) => !gate.passed)) throw new Error("Preflight blocked: resolve every safety gate first"); return; }
-  if (state.sortie.status !== "preflight" && state.sortie.status !== "cleared") throw new Error("Complete preflight before launch");
-  state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry();
+  if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw new Error("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }
+  if (command === "launch") { if (state.sortie.status !== "cleared") throw new Error("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry()[0]]; return; }
+  if (command === "advance") { if (state.sortie.status !== "launched") throw new Error("Launch the sortie before advancing telemetry"); state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry(); return; }
 }

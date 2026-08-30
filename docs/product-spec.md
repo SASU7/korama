@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Product Specification
 
-Status: Phase 0 contract, ready for founder review  
+Status: As-built product contract; local investor-demo implementation verified
 Date: 2026-08-29  
 Audience: coordinating agent, product/design, engineering, investor-demo reviewers
 
@@ -23,9 +23,9 @@ illustrative unless explicitly marked as verified test-system state.
 | Warehouse/compliance operator | Operations workspace | Receives, allocates FEFO stock, advances fulfilment, reviews origin evidence |
 | Drone safety officer | Delivery workspace | Reviews simulated gates, launches a cleared mission, injects unsafe weather |
 
-The deployed URL is protected by a shared demo access code. Phase 1 implements only
-that gate and a role-aware shell. Seeded identities, server-side identity switching,
-role assignments, and reset are Phase 2 capabilities.
+The deployed URL is protected by a shared demo access code. The local adapter also
+implements server-side identity switching and reset. Configured Supabase environments
+can use `pnpm auth:bootstrap` to create the three guided identities and assignments.
 
 ## 3. Markets and corridor rules
 
@@ -47,8 +47,9 @@ Ghana and have supporting evidence. `marketplace_future` is a roadmap capability
 1. A Nigerian consumer selects Nigeria and browses the catalogue.
 2. The consumer opens Ghana-origin shea cosmetics and sees producer, transformation
    summary, batch, expiry, ingredients, provisional origin status, and Lekki stock.
-3. Checkout shows NGN product price, illustrative tax/duty treatment, delivery fee,
-   and total. No commission, CAC, margin, profitability, or valuation claim appears.
+3. Checkout captures illustrative Nigerian delivery details and shows the server-calculated
+   NGN product price, tax/duty treatment, delivery fee, and total. No commission, CAC,
+   margin, profitability, or valuation claim appears.
 4. Paystack test mode creates a payment attempt. Server-side verification must match
    amount, currency, reference, and order before the order becomes `paid`.
 5. Operations sees Ghana production, Tema staging, bulk export, Lekki receipt, batch

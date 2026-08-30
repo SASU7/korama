@@ -1,7 +1,7 @@
 # Korama Investor Prototype — Technical Architecture
 
 Status: As-built deterministic prototype; production adapters pending  
-Date: 2026-08-29
+Date: 2026-08-30
 
 ## 1. Architecture shape
 
@@ -57,7 +57,8 @@ Core groups:
 - Governance: append-only `audit_events` and `idempotency_keys`.
 
 Money is stored as integer minor units with ISO currency. Order lines preserve price,
-tax/duty, product, seller, and origin snapshots. Inventory classification is one of
+tax/duty, product, seller, and origin snapshots; the deterministic order and shipment
+views carry the same immutable provisional compliance snapshot. Inventory classification is one of
 `direct_import`, `ghana_origin_export`, or the roadmap-only `marketplace_future`.
 
 ## 4. Authorization and RLS
@@ -92,6 +93,7 @@ safe to retry with an idempotency key.
 ## 6. HTTP contracts
 
 - `POST /api/payments/paystack/initialize`
+- `POST /api/cart/quote`
 - `GET /api/payments/paystack/verify`
 - `POST /api/webhooks/paystack`
 - `POST /api/demo/reset` (shared demo-code protected reset)
@@ -99,11 +101,12 @@ safe to retry with an idempotency key.
 - `GET /api/orders/:reference` (planned Supabase-backed owner/staff view)
 - `POST /api/fulfilment/orders/:reference/allocate` (demo adapter; Supabase transition planned)
 - `POST /api/orders/:reference/advance` (demo adapter; Supabase transition planned)
-- `POST /api/delivery/sorties/:reference/command` (demo adapter; Supabase transition planned)
+- `POST /api/delivery/sorties/:reference/command` (demo adapter; returns updated sortie, order, and shipment/delivery-leg snapshots)
 
 Payment initialization recalculates totals server-side. Callback visits never mark an
 order paid. Webhooks validate raw-body HMAC, match amount/currency/reference, and are
-idempotent.
+idempotent. The quote route owns the deterministic cart snapshot; payment initialization
+validates and preserves the delivery-address snapshot on the pending order.
 
 ## 7. Realtime and failure handling
 
@@ -119,7 +122,8 @@ Development, staging, and production are separate. The intended database workflo
 2. Rebuild the empty private schema locally with Supabase CLI and Docker.
 3. Test migrations, seeds, reset, RLS, grants, and advisors locally.
 4. Obtain explicit approval before applying migrations remotely.
-5. Generate TypeScript database types only after migrations stabilize.
+5. Generate TypeScript database types only after migrations stabilize; the local
+   contract is checked in at `lib/supabase/database.types.ts`.
 
 The existing private `rgd-certs` bucket is preserved and reviewed; generated previews
 are watermarked and never represented as valid certificates.
@@ -128,8 +132,9 @@ are watermarked and never represented as valid certificates.
 
 Use a private unexposed schema for privileged helpers, immutable audit events, mutable
 search paths fixed, least-privilege execution revoked, and server-side environment
-validation. Add structured logs, metrics, traces, and alerts before staging. No
-production secrets belong in the repository or browser bundle.
+validation. API failures emit structured, secret-free JSON logs with a request ID and
+return that ID to the caller; metrics, traces, and alerts remain staging follow-up work.
+No production secrets belong in the repository or browser bundle.
 
 ## 10. Current implementation boundary
 

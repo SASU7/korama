@@ -21,5 +21,5 @@ export async function GET(request: Request) {
     }
     const order = verifyDemoPayment(reference, amount, currency);
     return Response.json({ verified: true, order, serverChecked: true });
-  } catch (error) { return apiError(error); }
+  } catch (error) { return apiError(error, request); }
 }

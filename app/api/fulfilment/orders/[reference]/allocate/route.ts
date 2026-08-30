@@ -11,5 +11,5 @@ export async function POST(_request: Request, { params }: { params: Promise<{ re
     if (!state.order || state.order.reference !== reference) throw new Error("Order not found in operator scope");
     const batch = allocateFefo(state);
     return Response.json({ order: state.order, batch, task: state.tasks[1] });
-  } catch (error) { return apiError(error); }
+  } catch (error) { return apiError(error, _request); }
 }

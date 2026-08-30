@@ -304,6 +304,14 @@ create policy market_prices_are_readable on public.market_prices for select usin
 create policy variants_are_readable on public.variants for select using (true);
 create policy media_are_readable on public.media for select using (true);
 
+-- These tables are intentionally server-only. The explicit deny policies make the
+-- boundary visible to policy audits while service-role operations still bypass RLS.
+create policy operating_companies_server_only on public.operating_companies for select using (false);
+create policy tenants_server_only on public.tenants for select using (false);
+create policy audit_events_server_only on public.audit_events for select using (false);
+create policy idempotency_keys_server_only on public.idempotency_keys for select using (false);
+create policy payment_attempts_server_only on public.payment_attempts for select using (false);
+
 create policy tenant_profile_is_readable on public.tenants for select using (exists (select 1 from public.profiles p where p.tenant_id = id and p.id = auth.uid()));
 create policy customers_read_own_carts on public.carts for select using (profile_id = auth.uid());
 create policy customers_write_own_carts on public.carts for insert with check (profile_id = auth.uid());
@@ -339,6 +347,8 @@ grant usage on schema public to anon, authenticated;
 grant select on public.markets, public.products, public.market_listings, public.market_configs, public.market_prices, public.variants, public.media, public.ports_nodes, public.trade_lanes to anon, authenticated;
 grant select on public.profiles, public.role_assignments, public.orders, public.order_lines, public.order_events, public.carts, public.cart_items, public.addresses, public.ratings, public.returns, public.sites, public.inventory_batches, public.transfers, public.origin_assessments, public.shipments, public.sorties to authenticated;
 grant insert, update on public.carts, public.cart_items, public.addresses, public.ratings, public.returns to authenticated;
+grant execute on function private.has_role(public.user_role) to authenticated;
+grant execute on function private.same_operating_company(uuid) to authenticated;
 
 do $$
 begin

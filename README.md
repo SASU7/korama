@@ -19,6 +19,8 @@ pnpm typecheck
 pnpm test
 pnpm smoke
 pnpm migration:check
+pnpm api:acceptance
+pnpm db:test
 pnpm build
 ```
 

@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "smoke": "node scripts/smoke.mjs",
-    "migration:check": "node scripts/migration-sanity.mjs"
+    "migration:check": "node scripts/migration-sanity.mjs",
+    "api:acceptance": "node scripts/api-acceptance.mjs",
+    "db:test": "supabase test db --local",
+    "auth:bootstrap": "node scripts/bootstrap-identities.mjs",
+    "env:check": "node scripts/check-env.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

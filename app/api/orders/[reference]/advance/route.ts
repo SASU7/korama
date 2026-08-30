@@ -15,5 +15,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ ref
     const taskIndex = { picked: 2, packed: 3, dispatched: 4 }[next as "picked" | "packed" | "dispatched"];
     if (taskIndex !== undefined) state.tasks[taskIndex].done = true;
     return Response.json({ order: state.order, events: state.orderEvents, tasks: state.tasks });
-  } catch (error) { return apiError(error); }
+  } catch (error) { return apiError(error, request); }
 }

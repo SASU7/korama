@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Agent Workstreams
 
-Status: Phase 0 contract, ready for founder review  
+Status: As-built workstream map; local implementation verified
 Date: 2026-08-29
 
 ## Operating model
@@ -68,14 +68,19 @@ authentication, payment transitions, and RLS have one designated owner at a time
 - No packet may change checkout, payment, inventory, origin, or drone state machines
   without a coordinator-approved contract revision.
 
-## Phase 1 definition of done
+## Verified local definition of done
 
 - Clean install, build, lint, type check, and smoke test pass.
 - Access code gate works with keyboard and clear invalid-code recovery.
 - Navigation and market horizon work at 375, 768, and 1280 px.
 - Loading, empty, error, and success primitives exist for future data surfaces.
-- The shell does not contain catalogue, payment, warehouse, compliance, or drone logic.
+- The integrated demo keeps catalogue, payment, warehouse, compliance, and drone logic behind shared server contracts.
 - No secret is committed; environment validation reports missing configuration safely.
+- `supabase db lint --local --fail-on error` passes after a clean reset and seed.
+- `pnpm db:test` passes the seven-case RLS isolation suite.
+
+Remote staging, service credentials, observability, and founder release approval remain
+external gates. The detailed current boundary is recorded in `docs/as-built.md`.
 
 ## Handoff template
 

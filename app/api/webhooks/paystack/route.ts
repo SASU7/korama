@@ -15,7 +15,11 @@ export async function POST(request: Request) {
     if (!state.order) throw new Error("No pending order exists");
     const alreadyPaid = state.order.status !== "pending_payment";
     if (body.event !== "charge.success" || data.status !== "success") throw new Error("Only successful Paystack charge events are accepted");
-    const order = verifyDemoPayment(String(data.reference ?? "PSK-DEMO"), Number(data.amount ?? state.order.totalMinor), String(data.currency ?? state.order.currency));
+    const reference = String(data.reference ?? "").trim();
+    const amount = Number(data.amount);
+    const currency = String(data.currency ?? "").trim().toUpperCase();
+    if (!reference || !Number.isFinite(amount) || !currency) throw new Error("Successful Paystack events must include reference, amount, and currency");
+    const order = verifyDemoPayment(reference, amount, currency);
     return Response.json({ received: true, idempotent: alreadyPaid, serverSignatureVerified: signature === expected, order });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unexpected webhook error" }, { status: 400 }); }
 }
