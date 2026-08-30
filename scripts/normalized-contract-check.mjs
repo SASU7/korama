@@ -26,6 +26,8 @@ assert.ok(nigeria.some((item) => item.product.inventory_class === "ghana_origin_
 assert.ok(nigeria.some((item) => item.product.inventory_class === "direct_import" && item.listing.purchasable));
 assert.ok(nigeria.some((item) => item.product.inventory_class === "marketplace_future" && !item.listing.purchasable));
 assert.ok(nigeria.every((item) => item.variant && item.media.length > 0), "every seeded listing should have a variant and media row");
+const shea = nigeria.find((item) => item.product.reference === "NK-SHEA-BALM");
+assert.equal(shea?.product.attributes?.transformation, "Blended, filled, labelled, and batch-tested in Ghana", "product detail attributes should remain data-backed");
 
 const operations = await repository.getOperationalSnapshot("10000000-0000-0000-0000-000000000002");
 assert.equal(operations.batches.length, 4, "Nigeria should expose four seeded inventory batches");

@@ -121,9 +121,12 @@ try {
   const view = await repository.getOrderView(reference, userId);
   assert.ok(view);
   assert.equal(view.order.delivery_address_snapshot.countryCode, "NG");
+  assert.equal(view.lines[0].compliance_snapshot.assessment, "provisionally_eligible");
+  assert.equal(view.lines[0].compliance_snapshot.certificateWatermark, "DEMO — NOT A VALID CERTIFICATE");
   assert.equal(view.paymentAttempts.length, 1);
   assert.equal(view.deliveryLegs.length, 2);
   assert.equal(view.shipment?.status, "delivered");
+  assert.equal(view.shipment?.compliance_snapshot.assessment, "provisionally_eligible");
   console.log("normalized mutation pass: atomic order, payment idempotency, FEFO, fulfilment, weather fallback, and sortie lifecycle");
 } finally {
   await cleanup();

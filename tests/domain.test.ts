@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { configuredAccessCode, currentRole, hasValidSession, roleCookie, sessionCookie, sessionToken } from "../lib/demo-auth.ts";
+import { configuredAccessCode, currentRole, hasValidSession, roleCookie, sessionCookie, sessionToken, trustedRequestOrigin } from "../lib/demo-auth.ts";
 import { allocateFefo, assessOrigin, calculateQuote, markOrder, normalizeQuantity, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress } from "../lib/domain.ts";
 
 test("the seed contains the two-way catalogue and a roadmap listing", () => {
@@ -117,5 +117,29 @@ test("demo auth uses runtime secrets and rejects forged guided roles", () => {
   } finally {
     if (previousCode === undefined) delete process.env.KORAMA_DEMO_ACCESS_CODE; else process.env.KORAMA_DEMO_ACCESS_CODE = previousCode;
     if (previousSecret === undefined) delete process.env.KORAMA_DEMO_SESSION_SECRET; else process.env.KORAMA_DEMO_SESSION_SECRET = previousSecret;
+  }
+});
+
+test("cookie mutations reject cross-origin requests and production cookies are secure", () => {
+  const names = ["KORAMA_STAGING", "KORAMA_PRODUCTION", "NEXT_PUBLIC_APP_URL", "KORAMA_DEMO_ACCESS_CODE", "KORAMA_DEMO_SESSION_SECRET"];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  delete process.env.KORAMA_STAGING;
+  delete process.env.KORAMA_PRODUCTION;
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  try {
+    assert.equal(trustedRequestOrigin(new Request("http://localhost:3000", { headers: { origin: "http://localhost:3000" } })), null);
+    assert.equal(trustedRequestOrigin(new Request("http://localhost:3000", { headers: { origin: "https://attacker.example" } }))?.status, 403);
+    process.env.KORAMA_STAGING = "true";
+    process.env.NEXT_PUBLIC_APP_URL = "https://demo.example.com";
+    process.env.KORAMA_DEMO_ACCESS_CODE = "STAGING-ACCESS-CODE";
+    process.env.KORAMA_DEMO_SESSION_SECRET = "staging-session-secret-for-tests-32";
+    assert.equal(trustedRequestOrigin(new Request("https://demo.example.com", { headers: { origin: "https://demo.example.com" } })), null);
+    assert.equal(trustedRequestOrigin(new Request("https://demo.example.com"))?.status, 403);
+    assert.match(sessionCookie(), /; Secure/);
+  } finally {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
   }
 });

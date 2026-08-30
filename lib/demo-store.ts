@@ -1,3 +1,4 @@
+import "server-only";
 import { calculateQuote, DeliveryAddress, DemoState, getProduct, markOrder, seedDemoState } from "@/lib/domain";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

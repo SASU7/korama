@@ -14,6 +14,7 @@
     "smoke": "node scripts/smoke.mjs",
     "migration:check": "node scripts/migration-sanity.mjs",
     "api:acceptance": "node scripts/api-acceptance.mjs",
+    "api:normalized:acceptance": "KORAMA_NORMALIZED_ACCEPTANCE=true node scripts/api-acceptance.mjs",
     "db:test": "supabase test db --local",
     "normalized:check": "node scripts/normalized-contract-check.mjs",
     "normalized:mutation:check": "node scripts/normalized-mutation-check.mjs",
@@ -30,7 +31,8 @@
     "mapbox-gl": "^3.29.0",
     "next": "16.3.3",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@types/node": "26.4.0",

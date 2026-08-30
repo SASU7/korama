@@ -14,12 +14,14 @@ Open `http://localhost:3000` and enter `KORAMA-DEMO`.
 ## Verify
 
 ```bash
+pnpm audit --prod
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm smoke
 pnpm migration:check
 pnpm api:acceptance
+pnpm api:normalized:acceptance
 pnpm db:test
 pnpm normalized:check
 pnpm normalized:mutation:check
@@ -32,9 +34,11 @@ pnpm bundle:check
 ## Repository map
 
 - `app/` — Next.js App Router shell and API routes.
+- `components/AccessGate.tsx` — client-only code entry form over the server-rendered session gate.
 - `components/PrototypeWorkspace.tsx` — shopper, operations, compliance, delivery, and market surfaces.
 - `lib/domain.ts` — shared state machines, seed scenario, quote, FEFO, and safety rules.
 - `lib/demo-store.ts` — server-owned deterministic adapter with optional Supabase snapshot persistence.
+- `lib/supabase/normalized-adapter.ts` — server-only normalized Supabase HTTP adapter and view serializer.
 - `supabase/` — local migration, seed, private helper, RLS, index, and storage contracts.
 - `docs/` — product specification, architecture, workstreams, and runbook.
 - `docs/as-built.md` — verified implementation boundary and production handoff.
@@ -42,10 +46,13 @@ pnpm bundle:check
 - `pnpm deployment:check` — smoke-tests a configured HTTPS deployment’s readiness and access gate.
 - `pnpm normalized:check` — validates the typed normalized Supabase catalogue and operational read projections when service-role credentials are configured.
 - `pnpm normalized:mutation:check` — runs the server-only normalized order, payment, FEFO, fulfilment, weather-fallback, and sortie transaction contract against a local Supabase database.
+- `pnpm api:normalized:acceptance` — runs the cross-role HTTP journey through the normalized Supabase adapter against local Supabase.
+- `pnpm-workspace.yaml` — keeps pnpm installs on a seven-day release-age and no-downgrade trust policy.
 
 The default local demo uses the deterministic in-memory adapter. Set `KORAMA_USE_SUPABASE=true`
 with server-only Supabase credentials to persist the current investor journey; set
 `KORAMA_USE_SUPABASE_AUTH=true` in staging/production to authorize guided identities from
 Supabase role assignments. The normalized repository’s typed reads and server-only
-transaction primitives are implemented; HTTP adapter cutover and real Paystack/Mapbox
-credentials still require the approval gates in the plan.
+transaction primitives are implemented. Set `KORAMA_USE_NORMALIZED_REPOSITORY=true`
+alongside Supabase Auth to switch the HTTP routes to that adapter; staging validation
+and real Paystack/Mapbox credentials still require the approval gates in the plan.

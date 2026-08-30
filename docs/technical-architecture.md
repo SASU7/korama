@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Technical Architecture
 
-Status: As-built deterministic prototype with optional Supabase snapshot persistence and normalized staging fixtures; production adapters pending
+Status: As-built deterministic prototype with deterministic, snapshot, and normalized HTTP adapters; remote staging pending
 Date: 2026-08-30
 
 ## 1. Architecture shape
@@ -33,9 +33,12 @@ Secrets remain server-only. Browser code can receive sanitized, role-scoped view
 models but never service keys, webhook secrets, reset authority, or privileged claims.
 The repository includes optional `@supabase/ssr` server and browser factories; they
 return no client until the public URL and anon key are configured. The deterministic
-demo store remains the local fallback. When `KORAMA_USE_SUPABASE=true`, the server-only
-service-role adapter persists the current investor journey in a revisioned aggregate
-snapshot protected by RLS; browser clients never receive that key.
+demo store remains the local fallback. When
+`KORAMA_USE_SUPABASE=true` and `KORAMA_USE_NORMALIZED_REPOSITORY=false`, the
+server-only service-role adapter persists the current investor journey in a revisioned
+aggregate snapshot. When `KORAMA_USE_NORMALIZED_REPOSITORY=true`, the server-only
+service-role adapter uses the normalized tables and transactional RPCs; browser clients
+never receive the service-role key.
 
 ## 3. Data model contract
 
@@ -93,8 +96,9 @@ Every selected-adapter transition writes a server-side audit event when Supabase
 enabled and accepts an idempotency key where the route mutates state. The snapshot
 adapter preserves the visible timeline, revision guard, and idempotency records. The
 normalized repository exposes typed catalogue, scoped operational, and order-tracking
-reads plus server-only transactional order, payment, FEFO, fulfilment, and sortie
-primitives. The HTTP adapter cutover remains a staging follow-up.
+reads plus server-only transactional order, payment, FEFO, fulfilment, sortie, and
+reset primitives. The HTTP adapter selects this repository when
+`KORAMA_USE_NORMALIZED_REPOSITORY=true`; remote staging validation remains pending.
 
 ## 6. HTTP contracts
 
@@ -146,14 +150,15 @@ No production secrets belong in the repository or browser bundle.
 
 ## 10. Current implementation boundary
 
-The repository includes a deterministic demo adapter for the full investor flow and an
-optional server-only Supabase snapshot adapter for the same contracts:
+The repository includes a deterministic demo adapter, an optional server-only Supabase
+snapshot adapter, and a server-only normalized Supabase HTTP adapter for the same
+contracts:
 catalogue/provenance, server-quoted checkout, test payment verification, FEFO, order
 advancement, origin evidence, watermarked certificate preview, drone gates, telemetry,
 weather lockout, courier fallback, route-level idempotency keys, shallow capability
 actions, and role-scoped HTTP contracts. The client uses private Supabase Realtime subscriptions when configured,
 falls back to periodic refetching, and uses Mapbox for the seeded route when a public
-token is configured. HTTP adapter cutover, observability, and deployment credentials
-remain isolated follow-up work before staging. Both adapters are explicitly
+token is configured. Remote observability and deployment credentials remain isolated
+follow-up work before staging. Both adapters are explicitly
 labelled so snapshot persistence cannot be mistaken for a fully migrated production
 domain implementation.

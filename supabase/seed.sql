@@ -33,6 +33,13 @@ insert into public.products (id, reference, name, category, producer, inventory_
   ('30000000-0000-0000-0000-000000000010', 'DI-GH-LAMP', 'Rattan reading lamp', 'Home & craft', 'Global supplier · cleared in Ghana', 'direct_import', 'Direct-import comparison product.', 1100)
 on conflict (id) do nothing;
 
+update public.products set attributes = '{"ingredients":"Shea butter, baobab oil, vitamin E","transformation":"Blended, filled, labelled, and batch-tested in Ghana"}'::jsonb where reference = 'NK-SHEA-BALM';
+update public.products set attributes = '{"ingredients":"Baobab, moringa, sunflower oil","transformation":"Pressed, blended, filled, and batch-tested in Ghana"}'::jsonb where reference = 'NK-SHEA-OIL';
+update public.products set attributes = '{"transformation":"Woven, cut, sewn, and finished in Ghana"}'::jsonb where reference = 'AW-KENTE-TOTE';
+update public.products set attributes = '{"ingredients":"Oats, cocoa nibs, coconut, honey","transformation":"Mixed, baked, packed, and batch-tested in Ghana"}'::jsonb where reference = 'AF-COCOA-GRANOLA';
+update public.products set attributes = '{"transformation":"Woven and finished in Ghana"}'::jsonb where reference = 'TB-BOLGA-BASKET';
+update public.products set attributes = '{"ingredients":"100% cocoa","transformation":"Fermented, roasted, milled, and packed in Ghana"}'::jsonb where reference = 'VCW-COCOA-POWDER';
+
 insert into public.variants (id, product_id, reference, name, sku) values
   ('60000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'NK-SHEA-BALM-DEFAULT', 'Standard 180g', 'NK-SHEA-BALM-180G'),
   ('60000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', 'DI-NG-BLENDER-DEFAULT', 'Standard unit', 'DI-NG-BLENDER-UNIT'),

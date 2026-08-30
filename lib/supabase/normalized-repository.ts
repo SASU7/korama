@@ -65,6 +65,7 @@ export type NormalizedOrderView = {
   lines: Row<"order_lines">[];
   events: Row<"order_events">[];
   paymentAttempts: Row<"payment_attempts">[];
+  tasks: Row<"warehouse_tasks">[];
   shipment: Row<"shipments"> | null;
   deliveryLegs: Row<"delivery_legs">[];
   sortie: Row<"sorties"> | null;
@@ -163,22 +164,31 @@ export function createNormalizedRepository(client: Client) {
       return { operatingCompanyId, batches, balances, movements, transfers, tasks, originRecords, transformations, originEvidence, originAssessments, dutyQuotes, certificatePreviews, shipments, deliveryLegs, drones, authorizations, weatherSnapshots, geofences, sorties, sortieEvents };
     },
 
-    async getOrderView(reference: string, profileId?: string): Promise<NormalizedOrderView | null> {
+    async getOrderView(reference: string, profileId?: string, operatingCompanyId?: string): Promise<NormalizedOrderView | null> {
       let query = client.from("orders").select("*").eq("reference", reference);
       if (profileId) query = query.eq("profile_id", profileId);
+      if (operatingCompanyId) query = query.eq("operating_company_id", operatingCompanyId);
       const order = await checked("order lookup", query.maybeSingle());
       if (!order) return null;
 
-      const [lines, events, paymentAttempts, shipment] = await Promise.all([
+      const [lines, events, paymentAttempts, tasks, shipment] = await Promise.all([
         checkedMany("order lines read", client.from("order_lines").select("*").eq("order_id", order.id).order("id")),
         checkedMany("order events read", client.from("order_events").select("*").eq("order_id", order.id).order("created_at")),
         checkedMany("payment attempts read", client.from("payment_attempts").select("*").eq("order_id", order.id).order("created_at")),
+        checkedMany("order tasks read", client.from("warehouse_tasks").select("*").eq("order_id", order.id).order("created_at")),
         checked("shipment lookup", client.from("shipments").select("*").eq("order_id", order.id).maybeSingle()),
       ]);
       const deliveryLegs = shipment ? await checkedMany("delivery legs read", client.from("delivery_legs").select("*").eq("shipment_id", shipment.id).order("sequence_no")) : [];
       const sortie = shipment ? await checked("sortie lookup", client.from("sorties").select("*").eq("shipment_id", shipment.id).maybeSingle()) : null;
       const sortieEvents = sortie ? await checkedMany("sortie events read", client.from("sortie_events").select("*").eq("sortie_id", sortie.id).order("created_at")) : [];
-      return { order, lines, events, paymentAttempts, shipment, deliveryLegs, sortie, sortieEvents };
+      return { order, lines, events, paymentAttempts, tasks, shipment, deliveryLegs, sortie, sortieEvents };
+    },
+
+    async getLatestOrderView(operatingCompanyId: string, profileId?: string): Promise<NormalizedOrderView | null> {
+      let query = client.from("orders").select("reference").eq("operating_company_id", operatingCompanyId).order("created_at", { ascending: false }).limit(1);
+      if (profileId) query = query.eq("profile_id", profileId);
+      const latest = await checked("latest order lookup", query.maybeSingle());
+      return latest ? this.getOrderView(latest.reference, profileId, operatingCompanyId) : null;
     },
 
     async createOrder(input: NormalizedCreateOrderInput): Promise<NormalizedMutationResult> {
@@ -218,6 +228,10 @@ export function createNormalizedRepository(client: Client) {
 
     async commandSortie(orderReference: string, command: string): Promise<NormalizedMutationResult> {
       return checkedRpc("normalized sortie transition", client.rpc("korama_command_sortie", { p_order_reference: orderReference, p_command: command }));
+    },
+
+    async resetDemo(operatingCompanyId: string): Promise<NormalizedMutationResult> {
+      return checkedRpc("normalized demo reset", client.rpc("korama_reset_demo", { p_operating_company_id: operatingCompanyId }));
     },
   };
 }

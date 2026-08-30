@@ -1,6 +1,6 @@
 begin;
 
-select plan(28);
+select plan(33);
 
 insert into auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data) values
   ('51000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'consumer@example.test', '{}'::jsonb, '{}'::jsonb),
@@ -56,10 +56,15 @@ select is((select count(*)::int from public.transfers), 1, 'normalized Ghana-to-
 select is((select count(*)::int from public.drones), 1, 'normalized delivery asset is seeded');
 select is((select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'orders' and column_name = 'delivery_address_snapshot'), 1, 'normalized orders preserve an address snapshot');
 select is((select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'shipments' and column_name = 'status'), 1, 'normalized shipments preserve lifecycle status');
+select is((select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'order_lines' and column_name = 'compliance_snapshot'), 1, 'normalized order lines preserve compliance snapshots');
+select is((select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'shipments' and column_name = 'compliance_snapshot'), 1, 'normalized shipments preserve compliance snapshots');
+select is((select count(*)::int from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'attributes'), 1, 'normalized products preserve detail attributes');
 select is((select has_function_privilege('anon', 'public.korama_allocate_order_fefo(text)', 'execute')), false, 'anon cannot execute normalized mutations');
 select is((select has_function_privilege('authenticated', 'public.korama_allocate_order_fefo(text)', 'execute')), false, 'authenticated cannot execute normalized mutations');
 select is((select has_function_privilege('service_role', 'public.korama_allocate_order_fefo(text)', 'execute')), true, 'service role can execute normalized mutations');
-select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'korama_%'), 5, 'five normalized transactional functions are installed');
+select is((select has_function_privilege('anon', 'public.korama_reset_demo(uuid)', 'execute')), false, 'anon cannot execute normalized reset');
+select is((select has_function_privilege('service_role', 'public.korama_reset_demo(uuid)', 'execute')), true, 'service role can execute normalized reset');
+select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'korama_%'), 6, 'six normalized transactional functions are installed');
 
 delete from public.orders where id = '52000000-0000-0000-0000-000000000001';
 delete from public.role_assignments where profile_id in ('51000000-0000-0000-0000-000000000002', '51000000-0000-0000-0000-000000000003');

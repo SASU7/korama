@@ -984,6 +984,7 @@ export type Database = {
       }
       order_lines: {
         Row: {
+          compliance_snapshot: Json
           id: string
           order_id: string
           origin_snapshot: Database["public"]["Enums"]["inventory_class"]
@@ -995,6 +996,7 @@ export type Database = {
           tax_minor: number
         }
         Insert: {
+          compliance_snapshot?: Json
           id?: string
           order_id: string
           origin_snapshot: Database["public"]["Enums"]["inventory_class"]
@@ -1006,6 +1008,7 @@ export type Database = {
           tax_minor: number
         }
         Update: {
+          compliance_snapshot?: Json
           id?: string
           order_id?: string
           origin_snapshot?: Database["public"]["Enums"]["inventory_class"]
@@ -1329,6 +1332,7 @@ export type Database = {
       }
       products: {
         Row: {
+          attributes: Json
           category: string
           created_at: string
           description: string
@@ -1340,6 +1344,7 @@ export type Database = {
           weight_grams: number
         }
         Insert: {
+          attributes?: Json
           category: string
           created_at?: string
           description: string
@@ -1351,6 +1356,7 @@ export type Database = {
           weight_grams: number
         }
         Update: {
+          attributes?: Json
           category?: string
           created_at?: string
           description?: string
@@ -1589,6 +1595,7 @@ export type Database = {
       }
       shipments: {
         Row: {
+          compliance_snapshot: Json
           created_at: string
           delivery_method: string
           id: string
@@ -1599,6 +1606,7 @@ export type Database = {
           weight_grams: number
         }
         Insert: {
+          compliance_snapshot?: Json
           created_at?: string
           delivery_method: string
           id?: string
@@ -1609,6 +1617,7 @@ export type Database = {
           weight_grams: number
         }
         Update: {
+          compliance_snapshot?: Json
           created_at?: string
           delivery_method?: string
           id?: string
@@ -2160,6 +2169,10 @@ export type Database = {
           p_tax_minor: number
           p_total_minor: number
         }
+        Returns: Json
+      }
+      korama_reset_demo: {
+        Args: { p_operating_company_id: string }
         Returns: Json
       }
       korama_verify_payment: {

@@ -1,6 +1,6 @@
 # Korama Investor Prototype — Agent Workstreams
 
-Status: As-built workstream map; local implementation verified
+Status: As-built workstream map; automated local implementation verified; live browser pass pending
 Date: 2026-08-29
 
 ## Operating model
@@ -71,13 +71,13 @@ authentication, payment transitions, and RLS have one designated owner at a time
 ## Verified local definition of done
 
 - Clean install, build, lint, type check, and smoke test pass.
-- Access code gate works with keyboard and clear invalid-code recovery.
-- Navigation and market horizon work at 375, 768, and 1280 px.
+- Access code gate has keyboard and clear invalid-code recovery coverage; live browser confirmation remains pending.
+- Responsive CSS defines navigation and market-horizon states for 375, 768, and 1280 px; live browser confirmation remains pending.
 - Loading, empty, error, and success primitives exist for future data surfaces.
 - The integrated demo keeps catalogue, payment, warehouse, compliance, and drone logic behind shared server contracts.
 - No secret is committed; environment validation reports missing configuration safely.
 - `supabase db lint --local --fail-on error` passes after a clean reset and seed.
-- `pnpm db:test` passes the twenty-two-case RLS isolation, seed, and private-storage suite.
+- `pnpm db:test` passes the 33-case RLS isolation, seed, and private-storage suite.
 - `pnpm normalized:check` validates the typed normalized catalogue and scoped operational read projections when local or staging service-role credentials are available.
 
 Remote staging, service credentials, observability, and founder release approval remain

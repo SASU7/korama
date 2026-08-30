@@ -21,6 +21,7 @@ The canonical presenter flow is:
 ## Verification
 
 ```bash
+pnpm audit --prod
 pnpm env:check
 pnpm staging:check
 pnpm lint
@@ -105,8 +106,12 @@ security-definer helpers, and immutable audit/idempotency foundations.
   as the production data contract. `pnpm normalized:check` validates their typed
   read projections against a configured Supabase project, while
   `pnpm normalized:mutation:check` exercises the server-only transaction contract
-  and restores its temporary test data on completion. The HTTP adapter cutover still
-  requires separate staging validation before replacing the snapshot adapter.
+  and restores its temporary test data on completion. The normalized HTTP adapter is
+  locally cut over and still requires separate staging validation before becoming the
+  default release mode.
+- Set `KORAMA_USE_NORMALIZED_REPOSITORY=true` with Supabase Auth to route the HTTP
+  journey through normalized tables and transactional RPCs. Verify locally with
+  `pnpm api:normalized:acceptance`; keep the flag off for the deterministic demo.
 - Paystack initialization and verification are deterministic test adapters until live
   test credentials are configured.
 - The route map is seeded and fictional; the drone control surface is a digital twin.
