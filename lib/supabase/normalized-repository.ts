@@ -225,6 +225,29 @@ export function createNormalizedRepository(client: Client) {
       return latest ? this.getOrderView(latest.reference, profileId, operatingCompanyId) : null;
     },
 
+    /**
+     * Order summaries for the account list. getLatestOrderView returns a
+     * single order, which is why the orders page could only ever show one.
+     */
+    async listOrders(profileId: string, limit = 25) {
+      const orders = await checkedMany("orders list read", client
+        .from("orders")
+        .select("*")
+        .eq("profile_id", profileId)
+        .order("created_at", { ascending: false })
+        .limit(limit));
+      if (!orders.length) return [];
+      const lines = await checkedMany("orders list lines read", client
+        .from("order_lines")
+        .select("*")
+        .in("order_id", orders.map((order) => order.id))
+        .order("line_no"));
+      return orders.map((order) => ({
+        order,
+        lines: lines.filter((line) => line.order_id === order.id),
+      }));
+    },
+
     async createOrder(input: NormalizedCreateOrderInput): Promise<NormalizedMutationResult> {
       return checkedRpc("normalized order creation", client.rpc("korama_create_order", {
         p_profile_id: input.profileId,

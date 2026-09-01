@@ -1,5 +1,11 @@
 # Korama Investor Prototype — Product Specification
 
+> **Script names corrected 2026-09-01.** Several commands referenced below did
+> not exist in `package.json`: `api:acceptance`, `api:normalized:acceptance`,
+> `db:test`, `normalized:mutation:check` and `auth:bootstrap`. The `/api/demo/*`
+> routes and the `KORAMA-DEMO` access gate were removed in commit 589201f.
+> Runnable commands are listed in `README.md`; treat any others here as
+> intended-but-unbuilt.
 Status: As-built product contract; local investor-demo implementation verified
 Date: 2026-08-29  
 Audience: coordinating agent, product/design, engineering, investor-demo reviewers

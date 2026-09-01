@@ -40,10 +40,25 @@ export type Product = {
   sku?: string;
 };
 
+/**
+ * Why a batch can or cannot be allocated, decided on the server.
+ * The operations table used to compare `batch.expiry < "2026-08-29"` — a date
+ * literal in a client component, which is wrong the day after it was written.
+ */
+export type BatchStatus =
+  | "eligible"
+  | "allocated"
+  | "expired"
+  | "quarantined"
+  | "not_cleared"
+  | "origin_unsupported"
+  | "depleted";
+
 export type Batch = {
   id: string;
   batch: string;
   productId: string;
+  productName?: string;
   site: string;
   expiry: string;
   quantity: number;
@@ -51,6 +66,8 @@ export type Batch = {
   quarantined: boolean;
   cleared: boolean;
   originSupported: boolean;
+  inventoryClass?: InventoryClass;
+  status: BatchStatus;
 };
 
 export type CartLine = { productId: string; quantity: number };
@@ -108,7 +125,26 @@ export const DRONE_PAYLOAD_LIMIT_GRAMS = 2000;
 export type OrderEvent = { status: OrderStatus; label: string; detail: string; at: string; complete: boolean };
 export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "NG" };
 export type TransferStep = { label: string; detail: string; complete: boolean };
-export type ComplianceSnapshot = { assessment: "provisionally_eligible"; evidence: string[]; transformation: string; dutyQuote: string; certificateWatermark: string };
+/**
+ * All fields after certificateWatermark are optional so the fallback snapshot
+ * stays valid. They exist because the certificate preview used to hardcode
+ * "Nokware shea repair balm", "NK-SB-2407" and "Tema → Lekki" as string
+ * literals — correct for exactly one order and wrong for every other.
+ */
+export type ComplianceSnapshot = {
+  assessment: "provisionally_eligible";
+  evidence: string[];
+  transformation: string;
+  dutyQuote: string;
+  certificateWatermark: string;
+  productName?: string;
+  productReference?: string;
+  /** Refreshed at allocation to the batch that actually shipped. */
+  batchReference?: string;
+  /** Derived from transfers -> sites, e.g. "Tema → Lekki". */
+  movement?: string;
+  assessedAt?: string;
+};
 export type ComplianceState = ComplianceSnapshot;
 export type Gate = { key: string; label: string; detail: string; passed: boolean; severity?: "warning" | "danger" };
 export type Sortie = { status: SortieStatus; weather: "clear" | "unsafe"; telemetry: { point: string; altitude: number; speed: number; battery: number; link: string }[]; gates: Gate[]; fallbackReason?: string };
@@ -146,6 +182,8 @@ export type DemoState = {
   tasks: { label: string; detail: string; done: boolean }[];
   compliance: ComplianceState;
   sortie: Sortie;
+  /** Server date the snapshot was taken, so no client re-derives 'today'. */
+  asOf: string;
   lastMutation: string;
 };
 
@@ -184,9 +222,9 @@ export const seedDemoState = (): DemoState => {
     shipment: null,
     orderEvents: initialEvents,
     batches: [
-      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Lekki warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true },
-      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true },
-      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true },
+      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Lekki warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "expired" },
+      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "eligible" },
+      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true, status: "quarantined" },
     ],
     transfer: [
       { label: "Ghana production", detail: "Transformation record linked to NK-SB-2407", complete: true },
@@ -211,6 +249,7 @@ export const seedDemoState = (): DemoState => {
       { key: "battery", label: "Battery", detail: "94% · reserve protected", passed: true },
       { key: "override", label: "Manual override", detail: "Safety officer control available", passed: true },
     ] },
+    asOf: now,
     lastMutation: now,
   };
 };
