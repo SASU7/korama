@@ -32,6 +32,7 @@ export default async function SignInPage({
   if (await authContext()) redirect(next);
 
   const destination = RETURNING_TO[next];
+  console.log("Auth Error =>", params.error)
 
   return (
     <main className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6">
@@ -58,9 +59,7 @@ export default async function SignInPage({
               </AlertDescription>
             </Alert>
           )}
-          <p className="text-muted-foreground border-t pt-4 text-(length:--text-meta)">
-            Paystack runs in test mode. No live charges are made.
-          </p>
+
         </CardContent>
       </Card>
     </main>
