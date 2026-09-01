@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { mergeCookieCartIntoProfileCart } from "@/lib/supabase/cart";
 import { ensureConsumerProfile } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -28,5 +29,7 @@ export async function GET(request: Request) {
       new URL("/auth/sign-in?error=missing_user", url.origin),
     );
   await ensureConsumerProfile(user);
+  // Carry an anonymous cookie cart over to the profile cart.
+  await mergeCookieCartIntoProfileCart(user.id);
   return NextResponse.redirect(new URL(next, url.origin));
 }

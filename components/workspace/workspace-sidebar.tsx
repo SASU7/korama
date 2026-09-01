@@ -6,6 +6,7 @@ import {
   FileCheck2,
   LogOut,
   Map,
+  PackagePlus,
   Plane,
   ShoppingBag,
   Warehouse,
@@ -115,6 +116,16 @@ export function WorkspaceSidebar({
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {roles.includes("administrator") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Catalogue admin">
+                    <Link href="/admin/products">
+                      <PackagePlus aria-hidden />
+                      <span>Catalogue</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Shop">
                   <Link href="/shop">

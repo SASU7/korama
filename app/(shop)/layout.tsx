@@ -1,6 +1,8 @@
-import { StoreHeader } from "@/components/shop/store-header";
+import { Suspense } from "react";
+
 import { StoreFooter } from "@/components/shop/store-footer";
-import { authContext } from "@/lib/auth";
+import { StoreHeaderSkeleton } from "@/components/shop/store-header-skeleton";
+import { StoreHeaderData } from "@/components/shop/store-header-data";
 
 export const dynamic = "force-dynamic";
 
@@ -8,27 +10,21 @@ export const dynamic = "force-dynamic";
  * Storefront shell. Comfortable density, inherited from the root <body>.
  * Deliberately no sidebar: a persistent nav rail is the staff console's
  * identity, and a shopper does not need one.
+ *
+ * The layout itself awaits nothing. Its header data (session and cart count)
+ * streams inside Suspense, so a page that calls notFound() can still commit a
+ * 404 — awaiting here fixed the status at 200 before the page ever ran.
  */
-export default async function ShopLayout({
+export default function ShopLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const auth = await authContext();
-  const displayName =
-    auth?.user.user_metadata?.full_name ||
-    auth?.user.user_metadata?.name ||
-    auth?.user.email;
-
   return (
     <div className="flex min-h-svh flex-col">
-      <StoreHeader
-        authenticated={Boolean(auth)}
-        displayName={displayName}
-        roles={auth?.roles ?? []}
-        activeRole={auth?.activeRole ?? "consumer"}
-        cartCount={0}
-      />
+      <Suspense fallback={<StoreHeaderSkeleton />}>
+        <StoreHeaderData />
+      </Suspense>
       <main className="mx-auto w-full max-w-[1240px] flex-1 px-(--gutter) py-8">
         {children}
       </main>

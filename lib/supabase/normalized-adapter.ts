@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-import { buildTelemetry, type ComplianceSnapshot, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
+import { buildTelemetry, calculateQuote, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
 import { adminClient } from "@/lib/supabase/admin-client";
 
@@ -43,18 +43,26 @@ function productId(item: NormalizedCatalogueItem) {
   return stableProductIds[item.product.reference] ?? item.product.reference.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function complianceForProduct(productIdValue: string, context: { batches: Row<"inventory_batches">[]; assessments: Row<"origin_assessments">[]; dutyQuotes: Row<"duty_quotes">[]; certificates: Row<"certificate_previews">[] }) {
-  const batchIds = new Set(context.batches.filter((batch) => batch.product_id === productIdValue).map((batch) => batch.id));
+function complianceForProduct(productIdValue: string, context: { batches: Row<"inventory_batches">[]; assessments: Row<"origin_assessments">[]; dutyQuotes: Row<"duty_quotes">[]; certificates: Row<"certificate_previews">[]; products?: Row<"products">[] }) {
+  const productBatches = context.batches.filter((batch) => batch.product_id === productIdValue);
+  const batchIds = new Set(productBatches.map((batch) => batch.id));
   const assessment = context.assessments.find((candidate) => batchIds.has(candidate.batch_id) && candidate.status === "provisionally_eligible");
   if (!assessment) return undefined;
   const duty = context.dutyQuotes.find((candidate) => candidate.origin_assessment_id === assessment.id);
   const certificate = context.certificates.find((candidate) => candidate.origin_assessment_id === assessment.id);
+  const product = context.products?.find((candidate) => candidate.id === productIdValue);
+  const assessedBatch = productBatches.find((batch) => batch.id === assessment.batch_id);
   return {
     assessment: "provisionally_eligible",
     evidence: stringList(assessment.evidence),
     transformation: assessment.transformation_summary,
     dutyQuote: duty?.quote ?? assessment.duty_quote,
     certificateWatermark: certificate?.watermark ?? "PREVIEW — NOT A VALID CERTIFICATE",
+    // Real values, so the certificate stops hardcoding one product's details.
+    productName: product?.name,
+    productReference: product?.reference,
+    batchReference: assessedBatch?.reference,
+    assessedAt: assessment.created_at,
   } satisfies ComplianceSnapshot;
 }
 
@@ -87,6 +95,7 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
     assessments: [...operations.originAssessments, ...ghanaOperations.originAssessments],
     dutyQuotes: [...operations.dutyQuotes, ...ghanaOperations.dutyQuotes],
     certificates: [...operations.certificatePreviews, ...ghanaOperations.certificatePreviews],
+    products: [item.product],
   });
   const available = allocatable.reduce((total, batch) => total + Math.max(0, batch.quantity - batch.allocated), 0);
   const category = ["Beauty", "Fashion", "Pantry", "Home & craft"].includes(item.product.category) ? item.product.category as Product["category"] : "Home & craft";
@@ -139,6 +148,7 @@ function baseCompliance(context: NormalizedContext): ComplianceSnapshot {
     assessments: [...context.operations.originAssessments, ...context.ghanaOperations.originAssessments],
     dutyQuotes: [...context.operations.dutyQuotes, ...context.ghanaOperations.dutyQuotes],
     certificates: [...context.operations.certificatePreviews, ...context.ghanaOperations.certificatePreviews],
+    products: context.items.map((item) => item.product),
   }) ?? {
     assessment: "provisionally_eligible",
     evidence: [],
@@ -223,8 +233,18 @@ function taskState(view: NormalizedOrderView | null) {
 
 function transferState(context: NormalizedContext): TransferStep[] {
   const complete = context.operations.transfers.some((transfer) => transfer.status === "warehouse_received");
+  // The batch reference used to be a literal here too.
+  const originBatch = context.operations.batches.find(
+    (batch) => batch.inventory_class === "ghana_origin_export" && batch.origin_supported,
+  );
   return [
-    { label: "Ghana production", detail: "Transformation record linked to NK-SB-2407", complete },
+    {
+      label: "Ghana production",
+      detail: originBatch
+        ? `Transformation record linked to ${originBatch.reference}`
+        : "Transformation record on file",
+      complete,
+    },
     { label: "Tema staging", detail: "Received into Ghana export staging", complete },
     { label: "Bulk export", detail: "Cleared for export with provisional evidence", complete },
     { label: "Lekki receipt", detail: "Destination stock received and reconciled", complete },
@@ -233,38 +253,124 @@ function transferState(context: NormalizedContext): TransferStep[] {
 
 function toState(context: NormalizedContext, view: NormalizedOrderView | null, role?: UserRole): DemoState {
   const staffView = role !== "consumer";
+  const asOf = new Date().toISOString();
   const lineCompliance = view?.lines[0] ? object(view.lines[0].compliance_snapshot) : {};
-  const compliance = Object.keys(lineCompliance).length ? lineCompliance as unknown as ComplianceSnapshot : baseCompliance(context);
+  const complianceBase = Object.keys(lineCompliance).length ? lineCompliance as unknown as ComplianceSnapshot : baseCompliance(context);
+  // "Tema → Lekki" was a string literal in the certificate. Derive it.
+  const transferSteps = transferState(context);
+  const place = (step?: TransferStep) => step?.label.split(" ")[0];
+  const movement =
+    transferSteps.length >= 4
+      ? `${place(transferSteps[1])} → ${place(transferSteps[3])}`
+      : undefined;
+  const compliance: ComplianceSnapshot = { ...complianceBase, movement: complianceBase.movement ?? movement };
   const line = view?.lines[0];
   const product = line ? context.products.find((candidate) => candidate.id === productIdFromUuid(context.items, line.product_id)) : undefined;
+
+  // Order lines, in line_no order. Ordering matters now: getOrderView used to
+  // sort on a random uuid, which is invisible with one line and shuffles the
+  // display on every request with three.
+  const batchByUuid = new Map(context.operations.batches.map((batch) => [batch.id, batch]));
+  const orderLines: OrderLine[] = [...(view?.lines ?? [])]
+    .sort((left, right) => (left.line_no ?? 1) - (right.line_no ?? 1))
+    .map((row, index) => {
+      const slug = productIdFromUuid(context.items, row.product_id) ?? row.product_id;
+      const catalogueProduct = context.products.find((candidate) => candidate.id === slug);
+      const snapshot = object(row.compliance_snapshot);
+      return {
+        lineNo: row.line_no ?? index + 1,
+        productId: slug,
+        name: catalogueProduct?.name ?? text(object(row.product_snapshot).name) ?? slug,
+        producer: catalogueProduct?.producer ?? row.seller_snapshot ?? "",
+        origin: (row.origin_snapshot ?? "direct_import") as OrderLine["origin"],
+        quantity: row.quantity,
+        unitPriceMinor: row.price_minor,
+        subtotalMinor: row.subtotal_minor ?? row.price_minor * row.quantity,
+        taxMinor: row.tax_minor,
+        deliveryMinor: row.delivery_minor ?? 0,
+        batch: row.allocated_batch_id
+          ? batchByUuid.get(row.allocated_batch_id)?.reference
+          : undefined,
+        allocatedQuantity: row.allocated_quantity ?? 0,
+        compliance: Object.keys(snapshot).length
+          ? (snapshot as unknown as ComplianceSnapshot)
+          : undefined,
+      };
+    });
+
   const order = view ? {
     reference: view.order.reference,
     status: view.order.status as OrderStatus,
-    productId: product?.id ?? "shea-balm",
-    quantity: line?.quantity ?? 1,
+    lines: orderLines,
     subtotalMinor: view.order.subtotal_minor,
     taxMinor: view.order.tax_minor,
     deliveryMinor: view.order.delivery_minor,
     totalMinor: view.order.total_minor,
     currency: "NGN" as const,
+    itemCount: orderLines.reduce((sum, l) => sum + l.quantity, 0),
     address: deliveryAddress(view.order.delivery_address_snapshot),
     compliance,
     paymentReference: view.paymentAttempts.find((attempt) => attempt.status === "paid")?.provider_reference,
+    // Deprecated single-line shims, still read by the legacy workspace
+    // component. Remove with it.
+    productId: orderLines[0]?.productId ?? product?.id ?? "shea-balm",
+    quantity: orderLines[0]?.quantity ?? line?.quantity ?? 1,
   } : null;
   const shipment = toShipment(view ?? emptyOrderView(), compliance);
   return {
     products: context.products,
     selectedProductId: context.products.some((candidate) => candidate.id === "shea-balm") ? "shea-balm" : context.products[0]?.id ?? "",
-    cart: line ? [{ productId: product?.id ?? "shea-balm", quantity: line.quantity }] : [],
+    cart: [],
     order,
     shipment,
     orderEvents: view ? toOrderEvents(view.events, view.order.status as OrderStatus) : toOrderEvents([], "pending_payment"),
-    batches: staffView ? context.operations.batches.map((batch) => ({ id: batch.id, batch: batch.reference, productId: productIdFromUuid(context.items, batch.product_id) ?? batch.product_id, site: "Lekki warehouse", expiry: batch.expiry_date ?? "No expiry", quantity: batch.quantity, allocated: batch.allocated, quarantined: batch.quarantined, cleared: batch.customs_cleared, originSupported: batch.origin_supported })) : [],
+    batches: staffView ? context.operations.batches.map((batch) => toBatch(batch, context, asOf)) : [],
     transfer: staffView ? transferState(context) : [],
     tasks: staffView ? taskState(view) : [],
     compliance,
     sortie: view ? toSortie(view, context) : emptySortie(),
+    asOf,
     lastMutation: view?.order.updated_at ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Batch eligibility, decided here rather than in the UI, and using the same
+ * predicate as korama_allocate_order_fefo so the console never shows a status
+ * the allocator would disagree with.
+ */
+function toBatch(batch: Row<"inventory_batches">, context: NormalizedContext, asOf: string): Batch {
+  const today = asOf.slice(0, 10);
+  const remaining = batch.quantity - batch.allocated;
+  const status: BatchStatus = batch.quarantined
+    ? "quarantined"
+    : !batch.customs_cleared
+      ? "not_cleared"
+      : batch.inventory_class === "ghana_origin_export" && !batch.origin_supported
+        ? "origin_unsupported"
+        : batch.expiry_date !== null && batch.expiry_date < today
+          ? "expired"
+          : remaining <= 0
+            ? "depleted"
+            : batch.allocated > 0
+              ? "allocated"
+              : "eligible";
+  return {
+    id: batch.id,
+    batch: batch.reference,
+    productId: productIdFromUuid(context.items, batch.product_id) ?? batch.product_id,
+    productName: context.products.find(
+      (product) => product.id === productIdFromUuid(context.items, batch.product_id),
+    )?.name,
+    site: batch.operating_company_id === NIGERIA_OPERATING_COMPANY_ID ? "Lekki warehouse" : "Tema staging",
+    expiry: batch.expiry_date ?? "No expiry",
+    quantity: batch.quantity,
+    allocated: batch.allocated,
+    quarantined: batch.quarantined,
+    cleared: batch.customs_cleared,
+    originSupported: batch.origin_supported,
+    inventoryClass: batch.inventory_class,
+    status,
   };
 }
 
@@ -287,28 +393,76 @@ export async function readNormalizedOrder(reference: string, profileId?: string,
   return view ? { view, state: toState(context, view, role) } : null;
 }
 
-export async function normalizedQuote(productIdValue: string, quantity: number) {
-  const context = await loadContext();
-  const item = context.items.find((candidate) => candidate.market.code === "NG" && (productId(candidate) === productIdValue || candidate.product.id === productIdValue));
-  if (!item || !item.listing.purchasable) throw new Error("This listing is not purchasable in Nigeria");
-  const product = context.products.find((candidate) => candidate.id === productId(item));
-  if (!product) throw new Error("The requested normalized product was not found");
-  const subtotalMinor = product.priceMinor * quantity;
-  const taxMinor = Math.round(subtotalMinor * 0.075);
-  const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
-  return { product, quote: { subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, currency: "NGN" as const } };
+/**
+ * Resolve catalogue slugs to purchasable Nigerian listings, with a per-line
+ * message so the caller can say which item is the problem.
+ */
+function resolveNigerianLines(context: NormalizedContext, cart: CartLine[]) {
+  return cart.map((line, index) => {
+    const item = context.items.find(
+      (candidate) =>
+        candidate.market.code === "NG" &&
+        (productId(candidate) === line.productId || candidate.product.id === line.productId),
+    );
+    if (!item || !item.listing.purchasable)
+      throw new Error(`Line ${index + 1}: this listing is not purchasable in Nigeria`);
+    const product = context.products.find((candidate) => candidate.id === productId(item));
+    if (!product) throw new Error(`Line ${index + 1}: the product was not found`);
+    return { item, product, quantity: line.quantity };
+  });
 }
 
-export async function normalizedCreateOrder(profileId: string, reference: string, productIdValue: string, quantity: number, address: DeliveryAddress) {
+/**
+ * Server-priced quote. The arithmetic lives in lib/domain.ts so there is
+ * exactly one TypeScript definition to keep in step with the SQL.
+ */
+export async function normalizedQuote(cart: CartLine[]) {
   const context = await loadContext();
-  const item = context.items.find((candidate) => candidate.market.code === "NG" && (productId(candidate) === productIdValue || candidate.product.id === productIdValue));
-  if (!item || !item.listing.purchasable) throw new Error("This listing is not purchasable in Nigeria");
-  const product = context.products.find((candidate) => candidate.id === productId(item));
-  if (!product) throw new Error("The requested normalized product was not found");
-  const subtotalMinor = product.priceMinor * quantity;
-  const taxMinor = Math.round(subtotalMinor * 0.075);
-  const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
-  const result = await context.repository.createOrder({ profileId, reference, operatingCompanyId: NIGERIA_OPERATING_COMPANY_ID, marketId: NIGERIA_MARKET_ID, productId: item.product.id, quantity, currency: "NGN", subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, deliveryAddress: address });
+  const resolved = resolveNigerianLines(context, cart);
+  const state = { products: context.products } as DemoState;
+  const quote = calculateQuote(
+    state,
+    resolved.map((entry) => ({ productId: entry.product.id, quantity: entry.quantity })),
+  );
+  return {
+    lines: resolved.map((entry, index) => ({
+      ...quote.lines[index],
+      product: entry.product,
+    })),
+    quote,
+    weightGrams: resolved.reduce(
+      (grams, entry) => grams + entry.product.weightGrams * entry.quantity,
+      0,
+    ),
+    limits: {
+      maxLines: MAX_CART_LINES,
+      maxLineQuantity: MAX_LINE_QUANTITY,
+      maxCartQuantity: MAX_CART_QUANTITY,
+    },
+  };
+}
+
+export async function normalizedCreateOrder(
+  profileId: string,
+  reference: string,
+  cart: CartLine[],
+  address: DeliveryAddress,
+) {
+  const context = await loadContext();
+  const resolved = resolveNigerianLines(context, cart);
+  // No money crosses this boundary: korama_create_order prices every line
+  // from market_listings itself.
+  const result = await context.repository.createOrder({
+    profileId,
+    reference,
+    operatingCompanyId: NIGERIA_OPERATING_COMPANY_ID,
+    marketId: NIGERIA_MARKET_ID,
+    lines: resolved.map((entry) => ({
+      productId: entry.item.product.id,
+      quantity: entry.quantity,
+    })),
+    deliveryAddress: address,
+  });
   const view = await context.repository.getOrderView(reference, profileId);
   if (!view) throw new Error("Normalized order was created but could not be read back");
   return { result, state: toState(context, view) };
@@ -334,4 +488,60 @@ export async function normalizedCommand(reference: string, command: string) {
   const context = await loadContext();
   if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
+}
+
+/** Catalogue slug -> products.id, for the cart store. */
+export async function productUuidForSlug(slug: string) {
+  const context = await loadContext();
+  const item = context.items.find(
+    (candidate) => productId(candidate) === slug || candidate.product.id === slug,
+  );
+  return item?.product.id;
+}
+
+/**
+ * products.id -> catalogue slug. Looked up rather than cached: a warm-on-read
+ * cache would silently return undefined whenever the cart is read before the
+ * catalogue, which is exactly what happens on a cold request.
+ */
+export async function slugForProductUuid(uuid: string) {
+  const context = await loadContext();
+  const item = context.items.find((candidate) => candidate.product.id === uuid);
+  return item ? productId(item) : undefined;
+}
+
+export type OrderSummaryRow = {
+  reference: string;
+  status: OrderStatus;
+  placedAt: string;
+  itemCount: number;
+  lineCount: number;
+  headline: string;
+  totalMinor: number;
+  currency: string;
+};
+
+/** Every order a customer has placed, newest first. */
+export async function readNormalizedOrders(profileId: string): Promise<OrderSummaryRow[]> {
+  const context = await loadContext();
+  const rows = await context.repository.listOrders(profileId);
+  return rows.map(({ order, lines }) => {
+    const first = lines[0];
+    const slug = first ? productIdFromUuid(context.items, first.product_id) : undefined;
+    const name =
+      context.products.find((product) => product.id === slug)?.name ??
+      text(object(first?.product_snapshot).name) ??
+      "Order";
+    const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
+    return {
+      reference: order.reference,
+      status: order.status as OrderStatus,
+      placedAt: order.created_at,
+      itemCount,
+      lineCount: lines.length,
+      headline: lines.length > 1 ? `${name} +${lines.length - 1} more` : name,
+      totalMinor: order.total_minor,
+      currency: order.currency,
+    };
+  });
 }

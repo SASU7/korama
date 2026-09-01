@@ -1,5 +1,11 @@
 # Korama Investor Prototype — Runbook
 
+> **Script names corrected 2026-09-01.** Several commands referenced below did
+> not exist in `package.json`: `api:acceptance`, `api:normalized:acceptance`,
+> `db:test`, `normalized:mutation:check` and `auth:bootstrap`. The `/api/demo/*`
+> routes and the `KORAMA-DEMO` access gate were removed in commit 589201f.
+> Runnable commands are listed in `README.md`; treat any others here as
+> intended-but-unbuilt.
 ## Local start
 
 ```bash
@@ -7,11 +13,13 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:3000` and enter `KORAMA-DEMO`.
+Open `http://localhost:3000`. The shared access-code gate was removed in
+commit 589201f; sign-in is Google OAuth via Supabase.
 
 The canonical presenter flow is:
 
-1. Commerce → Nigeria → Nokware shea repair balm → review the illustrative delivery details → Buy in test mode.
+1. Shop → Nigeria → open a product → Add to cart. Add a second product to
+   show a multi-line order, then Cart → Checkout → Paystack test payment.
 2. Switch guided identity to `Warehouse + compliance`, then Operations → Allocate → Confirm pick → Confirm pack → Dispatch. Packing creates the shipment and dispatch starts its simulated delivery leg.
 3. Compliance → show the evidence chain and `DEMO — NOT A VALID CERTIFICATE`.
 4. Switch guided identity to `Drone safety officer`, then Delivery → Run preflight → Launch simulated sortie.
@@ -23,13 +31,13 @@ The canonical presenter flow is:
 ```bash
 pnpm audit --prod
 pnpm env:check
-pnpm staging:check
+pnpm production:check
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm smoke
 pnpm migration:check
-pnpm api:acceptance
+pnpm bundle:check
 pnpm build
 pnpm install --frozen-lockfile
 ```
@@ -48,7 +56,8 @@ credentials, set `KORAMA_USE_SUPABASE=true`, and run the acceptance harness twic
 first server process exited.
 
 `lib/supabase/database.types.ts` is generated from the local schema after migrations
-stabilize. `pnpm migration:check` statically verifies that the migration contains the core tables,
+stabilize. `pnpm migration:check
+pnpm bundle:check` statically verifies that the migration contains the core tables,
 RLS markers, guided-role policies, and unique index names. Full `supabase db lint` and
 seed/reset execution require Docker; if Docker is unavailable, record that result and
 do not apply the migration to a remote project.
@@ -74,7 +83,7 @@ The guided-role cookie is signed by `KORAMA_DEMO_SESSION_SECRET`; production mod
 requires that secret and a non-default access code. `pnpm env:check` fails closed when
 production adapter credentials or access-security settings are missing.
 
-`pnpm staging:check` is opt-in: it performs read-only checks against the configured
+`pnpm production:check` is opt-in: it performs read-only checks against the configured
 Supabase REST endpoint, Auth identities, private `rgd-certs` bucket, and Mapbox style
 endpoint only when `KORAMA_STAGING=true` or `KORAMA_PRODUCTION=true`. `/api/health`
 is safe to use as a deployment readiness probe and never returns secret values.

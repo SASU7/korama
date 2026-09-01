@@ -48,7 +48,9 @@ export function AccountMenu({
     });
   }
 
-  const staffRoles = roles.filter((r) => r !== "consumer");
+  const staffRoles = roles.filter(
+    (r) => r !== "consumer" && r !== "administrator",
+  );
 
   return (
     <DropdownMenu>
@@ -70,6 +72,11 @@ export function AccountMenu({
         <DropdownMenuItem asChild>
           <Link href="/account/orders">Your orders</Link>
         </DropdownMenuItem>
+        {roles.includes("administrator") && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/products">Manage catalogue</Link>
+          </DropdownMenuItem>
+        )}
         {staffRoles.length > 0 && (
           <>
             <DropdownMenuSeparator />

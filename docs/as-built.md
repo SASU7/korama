@@ -1,5 +1,11 @@
 # Korama Prototype — As-built handoff
 
+> **Script names corrected 2026-09-01.** Several commands referenced below did
+> not exist in `package.json`: `api:acceptance`, `api:normalized:acceptance`,
+> `db:test`, `normalized:mutation:check` and `auth:bootstrap`. The `/api/demo/*`
+> routes and the `KORAMA-DEMO` access gate were removed in commit 589201f.
+> Runnable commands are listed in `README.md`; treat any others here as
+> intended-but-unbuilt.
 Status: local investor-demo implementation complete through deterministic, snapshot, and normalized HTTP adapters
 Date: 2026-08-30
 
@@ -30,33 +36,23 @@ pnpm typecheck
 pnpm test
 pnpm smoke
 pnpm migration:check
-pnpm api:acceptance
-pnpm api:normalized:acceptance
-pnpm db:test
 pnpm normalized:check
-pnpm normalized:mutation:check
 pnpm build
 pnpm bundle:check
 pnpm dev
 ```
 
-Open `http://localhost:3000` and use `KORAMA-DEMO`. The canonical presentation path
-is documented in `docs/runbook.md`. Reset the selected local adapter between runs; reset
-does not call Paystack or mutate external services.
+Open `http://localhost:3000`. The canonical presentation path is documented in
+`docs/runbook.md`. The shared access-code gate was removed in commit 589201f;
+sign-in is Google OAuth via Supabase.
 
 ## API contracts used by the demo
 
-- `POST /api/demo/access` establishes an HTTP-only signed session.
-- `GET /api/demo/session` reports authentication and the server-held guided role.
-- `POST /api/demo/identity` sets the server-held guided role.
-- `POST /api/demo/reset` is restricted to the signed warehouse-operator identity.
-- `GET /api/demo/state` returns the sanitized demo state.
 - `GET /api/orders/:reference` returns the authenticated order view.
 - Payment, fulfilment, order advancement, and delivery routes enforce session and role scope.
 - `POST /api/webhooks/paystack` validates raw-body HMAC-SHA512 and accepts only successful charge events.
-- `pnpm auth:bootstrap` creates the three Supabase guided identities when operator credentials are configured.
 - `pnpm env:check` validates mode-dependent configuration without printing secret values.
-- `pnpm staging:check` performs read-only full Supabase REST-schema/seed and Mapbox
+- `pnpm production:check` performs read-only full Supabase REST-schema/seed and Mapbox
   checks when staging mode is explicitly enabled, and rejects default access secrets.
 - `GET /api/health` is a public, secret-free readiness check for deployment probes;
   it reports adapter mode without returning credentials or user data.
@@ -64,16 +60,8 @@ does not call Paystack or mutate external services.
   access gate without logging response secrets.
 - `pnpm normalized:check` exercises the typed normalized catalogue and scoped
   operational repository against configured Supabase data.
-- `pnpm normalized:mutation:check` exercises the server-only normalized deep-order
-  transaction contract against a local Supabase database.
-- `pnpm api:normalized:acceptance` exercises the complete HTTP journey through the
-  normalized adapter, including Auth-guided role switching and normalized reset.
 - `pnpm bundle:check` scans the built browser assets for server-only secret references
   and common secret-value formats.
-- `pnpm api:acceptance` boots the built app with deterministic adapters and verifies the
-  cross-role HTTP journey, catalogue gating, payment idempotency, FEFO, fulfilment,
-  shipment lifecycle, compliance snapshots, drone fallback/lifecycle behavior, and
-  Supabase audit persistence when that adapter is enabled.
 - Cookie-authenticated mutations enforce same-origin requests, hosted cookies are
   `HttpOnly`, `SameSite=Lax`, and `Secure`, JSON/webhook bodies are bounded, and the
   app shell sends baseline framing, content-sniffing, referrer, and permissions headers.
@@ -98,3 +86,38 @@ but the Next 16 ESLint bundle still uses plugins that fail under ESLint 10, whil
 transitive `typescript-eslint` 8.68.0 peer contract requires TypeScript below 6.1.
 The verified versions therefore remain ESLint 9.39.5 and TypeScript 6.0.3; revisit these
 two major upgrades when the Next toolchain publishes compatible plugin support.
+
+
+## UI overhaul (2026-09-01)
+
+The five surfaces no longer render from one 1,993-line client component. They
+are separate routes under two shells with different densities, built on
+Tailwind v4 and shadcn/ui with a Korama green/gold token system in light and
+dark. See `brand.md` for the palette and the density rules.
+
+Structural changes worth knowing:
+
+- `app/(shop)`, `app/(checkout)` and `app/(workspace)` route groups. Checkout
+  is its own group so the storefront shell never wraps it.
+- `proxy.ts` redirects unauthenticated visitors away from `/account`,
+  `/checkout`, `/operations`, `/compliance` and `/delivery` before anything
+  renders. Every protected page still asserts auth and role for itself —
+  middleware does not run on client-side navigations.
+- Orders are multi-line. `korama_create_order` takes `p_lines jsonb` and
+  computes every money figure itself; no client-supplied price reaches the
+  database. `korama_allocate_order_fefo` allocates per line, all or nothing.
+- `lib/domain.ts` and the SQL must agree on order arithmetic to the minor
+  unit. `tests/quote-parity.test.ts` is the guard: if they drift,
+  `korama_verify_payment` starts rejecting real Paystack payments.
+- The cart is server-owned — `carts`/`cart_items` when signed in, an httpOnly
+  cookie when not, merged on sign-in.
+
+### Known limitations
+
+- `public/products/` has no photographs. The pipeline is complete and files
+  drop in with no code change; see `public/products/README.md` for the
+  expected filenames and what each should depict.
+- `PAYSTACK_SECRET_KEY` must be a `sk_test_` key before checkout can be
+  exercised end to end.
+- The hosted Supabase project still needs migration `20260901120000` applied
+  and the corrected seed value for `market_configs.checkout_enabled` on Ghana.

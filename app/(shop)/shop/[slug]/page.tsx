@@ -11,6 +11,7 @@ import { Money } from "@/components/shared/money";
 import { Identifier } from "@/components/shared/identifier";
 import { OriginBadge } from "@/components/shared/origin-badge";
 import { ProductImage } from "@/components/shop/product-image";
+import { AddToCartButton } from "@/components/shop/add-to-cart-button";
 import { productImageSrc } from "@/lib/product-image";
 import { readNormalizedState } from "@/lib/supabase/normalized-adapter";
 import { readMarkets } from "@/lib/supabase/domain-markets";
@@ -30,6 +31,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const product = await findProduct((await params).slug);
+  // Deliberately NOT notFound() here: throwing from generateMetadata makes
+  // Next commit the response as 200 and only render the not-found body. The
+  // page's own notFound() sets the status correctly.
   if (!product) return { title: "Product not found — Korama" };
   const image = productImageSrc(product.images?.[0]?.path);
   return {
@@ -126,9 +130,11 @@ export default async function ProductPage({
               </AlertDescription>
             </Alert>
           ) : (
-            <Button size="lg" className="w-full" asChild>
-              <Link href={`/cart?add=${product.id}`}>Add to cart</Link>
-            </Button>
+            <AddToCartButton
+              productId={product.id}
+              name={product.name}
+              className="w-full"
+            />
           )}
         </div>
       </div>

@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -943,8 +963,13 @@ export type Database = {
       }
       order_lines: {
         Row: {
+          allocated_batch_id: string | null
+          allocated_quantity: number
           compliance_snapshot: Json
+          delivery_minor: number
           id: string
+          line_no: number
+          market_listing_id: string | null
           order_id: string
           origin_snapshot: Database["public"]["Enums"]["inventory_class"]
           price_minor: number
@@ -952,11 +977,17 @@ export type Database = {
           product_snapshot: Json
           quantity: number
           seller_snapshot: string
+          subtotal_minor: number
           tax_minor: number
         }
         Insert: {
+          allocated_batch_id?: string | null
+          allocated_quantity?: number
           compliance_snapshot?: Json
+          delivery_minor?: number
           id?: string
+          line_no?: number
+          market_listing_id?: string | null
           order_id: string
           origin_snapshot: Database["public"]["Enums"]["inventory_class"]
           price_minor: number
@@ -964,11 +995,17 @@ export type Database = {
           product_snapshot?: Json
           quantity: number
           seller_snapshot: string
+          subtotal_minor?: number
           tax_minor: number
         }
         Update: {
+          allocated_batch_id?: string | null
+          allocated_quantity?: number
           compliance_snapshot?: Json
+          delivery_minor?: number
           id?: string
+          line_no?: number
+          market_listing_id?: string | null
           order_id?: string
           origin_snapshot?: Database["public"]["Enums"]["inventory_class"]
           price_minor?: number
@@ -976,9 +1013,24 @@ export type Database = {
           product_snapshot?: Json
           quantity?: number
           seller_snapshot?: string
+          subtotal_minor?: number
           tax_minor?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "order_lines_allocated_batch_id_fkey"
+            columns: ["allocated_batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_market_listing_id_fkey"
+            columns: ["market_listing_id"]
+            isOneToOne: false
+            referencedRelation: "market_listings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_lines_order_id_fkey"
             columns: ["order_id"]
@@ -2115,18 +2167,12 @@ export type Database = {
       }
       korama_create_order: {
         Args: {
-          p_currency: string
           p_delivery_address: Json
-          p_delivery_minor: number
+          p_lines: Json
           p_market_id: string
           p_operating_company_id: string
-          p_product_id: string
           p_profile_id: string
-          p_quantity: number
           p_reference: string
-          p_subtotal_minor: number
-          p_tax_minor: number
-          p_total_minor: number
         }
         Returns: Json
       }
@@ -2313,6 +2359,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       inventory_class: [
@@ -2370,3 +2419,4 @@ export const Constants = {
     },
   },
 } as const
+

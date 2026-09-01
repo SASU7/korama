@@ -99,6 +99,8 @@ for (const file of sources) {
   for (const forbidden of [
     "@/lib/supabase/normalized-adapter",
     "@/lib/supabase/admin-client",
+    "@/lib/supabase/catalogue-admin",
+    "@/lib/supabase/cart",
     "@/lib/auth-guards",
   ]) {
     if (body.includes(forbidden))

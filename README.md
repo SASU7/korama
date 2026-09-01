@@ -131,3 +131,35 @@ pnpm dlx vercel@latest deploy . --prod -y
 ## POC boundaries
 
 Prices, duty treatment, provenance evidence, aviation records, and operational events are illustrative. The app does not claim regulatory approval, issue valid certificates, operate real aircraft, process live money, or integrate with customs/tax registries. Those boundaries are shown contextually where they affect a user decision rather than as investor-oriented presentation copy.
+
+
+## Routes
+
+| Route | Shell | Access |
+|---|---|---|
+| `/shop`, `/shop/[slug]`, `/markets`, `/cart` | Storefront | Public |
+| `/account/orders`, `/account/orders/[reference]` | Storefront | Signed in |
+| `/checkout`, `/checkout/complete` | Focused checkout | Signed in |
+| `/operations`, `/compliance` | Staff console | `warehouse_operator` |
+| `/delivery` | Staff console | `safety_officer` |
+| `/access-denied` | Storefront | Public |
+| `/auth/sign-in`, `/auth/callback` | — | Public |
+
+## Commands that exist
+
+```bash
+pnpm dev              # start the app
+pnpm build            # production build
+pnpm lint             # eslint
+pnpm typecheck        # tsc --noEmit
+pnpm test             # node --test tests/*.test.ts
+pnpm smoke            # structural checks: tokens, route groups, a11y, boundaries
+pnpm migration:check  # static assertions over supabase/migrations
+pnpm normalized:check # exercises the catalogue/operational reads
+pnpm env:check        # config validation, prints no secrets
+pnpm bundle:check     # scans built client assets for server-only secrets
+pnpm production:check # read-only staging preflight
+pnpm deployment:check # verifies a deployed HTTPS URL
+```
+
+The design system, palette and density rules are documented in `brand.md`.

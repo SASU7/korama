@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { apiError, jsonBody } from "@/lib/api";
 import { requireAuth, trustedRequestOrigin } from "@/lib/auth";
-import { normalizeQuantity, validateDeliveryAddress } from "@/lib/domain";
+import { normalizeCart, normalizeQuantity, validateDeliveryAddress } from "@/lib/domain";
 import { paystackSecret } from "@/lib/paystack";
 import {
   getIdempotentResponse,
@@ -23,11 +23,18 @@ export async function POST(request: Request) {
     );
     if (cached) return Response.json(cached.body, { status: cached.status });
     const body = await jsonBody(request);
+    const cart = Array.isArray(body.lines)
+      ? normalizeCart(body.lines)
+      : normalizeCart([
+          {
+            productId: String(body.productId ?? "shea-balm"),
+            quantity: normalizeQuantity(body.quantity),
+          },
+        ]);
     const { state } = await normalizedCreateOrder(
       auth.context.user.id,
       `KOR-NG-${Date.now()}-${randomUUID().slice(0, 8)}`,
-      String(body.productId ?? "shea-balm"),
-      normalizeQuantity(body.quantity),
+      cart,
       validateDeliveryAddress(body.address),
     );
     if (!state.order) throw new Error("Order creation returned no order");
@@ -87,7 +94,12 @@ export async function POST(request: Request) {
       await recordAudit(
         "payment_initialized",
         "order",
-        { reference: state.order.reference, provider: "paystack" },
+        {
+          reference: state.order.reference,
+          provider: "paystack",
+          lineCount: state.order.lines.length,
+          itemCount: state.order.itemCount,
+        },
         auth.context.user.id,
       );
     }

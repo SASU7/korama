@@ -7,7 +7,18 @@ const seed = await readFile(new URL("../supabase/seed.sql", import.meta.url), "u
 const requiredTables = ["tenants", "operating_companies", "markets", "ports_nodes", "trade_lanes", "market_configs", "products", "variants", "media", "market_listings", "market_prices", "carts", "cart_items", "addresses", "orders", "ratings", "returns", "suppliers", "receipts", "inventory_batches", "inventory_balances", "inventory_movements", "warehouse_tasks", "origin_records", "transformation_records", "origin_evidence", "origin_assessments", "duty_quotes", "certificate_previews", "shipments", "delivery_legs", "drones", "authorizations", "weather_snapshots", "geofences", "sorties", "sortie_events", "audit_events", "idempotency_keys"];
 const requiredPolicies = ["customers_read_own_orders", "staff_read_scoped_orders", "safety_read_scoped_sorties", "roles_are_not_self_editable", "customers_write_own_carts", "staff_read_scoped_tasks", "safety_read_scoped_weather", "payment_attempts_server_only", "korama_authenticated_postgres_changes"];
 const requiredStorageMarkers = ["insert into storage.buckets", "'rgd-certs'", "public = false", "file_size_limit = 10485760"];
-const requiredMutationMarkers = ["create or replace function public.korama_create_order", "create or replace function public.korama_verify_payment", "create or replace function public.korama_allocate_order_fefo", "create or replace function public.korama_advance_order", "create or replace function public.korama_command_sortie", "delivery_address_snapshot", "shipments_status_check", "compliance_snapshot", "attributes jsonb", "grant execute on function public.korama_allocate_order_fefo(text) to service_role", "drop table if exists public.demo_state_snapshots"];
+const requiredMutationMarkers = ["create or replace function public.korama_create_order", "create or replace function public.korama_verify_payment", "create or replace function public.korama_allocate_order_fefo", "create or replace function public.korama_advance_order", "create or replace function public.korama_command_sortie", "delivery_address_snapshot", "shipments_status_check", "compliance_snapshot", "attributes jsonb", "grant execute on function public.korama_allocate_order_fefo(text) to service_role", "drop table if exists public.demo_state_snapshots",
+  // Multi-line order contract. korama_create_order is dropped and recreated
+  // with a jsonb line array and no money parameters at all, so these assert
+  // both the new signature and that its ACL was restated after the drop.
+  "drop function if exists public.korama_create_order",
+  "p_lines                jsonb",
+  "line_no smallint",
+  "allocated_batch_id uuid",
+  "order_lines_order_product_key",
+  "pg_advisory_xact_lock",
+  "b.inventory_class <> 'ghana_origin_export' or b.origin_supported = true",
+  "grant execute on function public.korama_create_order(uuid, text, uuid, uuid, jsonb, jsonb) to service_role"];
 for (const table of requiredTables) if (!sql.includes(`create table public.${table}`)) throw new Error(`missing table: ${table}`);
 for (const policy of requiredPolicies) if (!sql.includes(`create policy ${policy}`)) throw new Error(`missing policy: ${policy}`);
 for (const marker of requiredStorageMarkers) if (!sql.includes(marker)) throw new Error(`missing storage contract marker: ${marker}`);

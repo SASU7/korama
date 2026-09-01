@@ -1,11 +1,8 @@
 /* Korama design tokens.
  *
  * Layer order is declared once, here, before Tailwind's own declaration.
- * `legacy` sits between base and components so app/legacy.css beats
- * Preflight but loses to every Tailwind utility. Delete `legacy` from this
- * list when components/PrototypeWorkspace.tsx goes.
  */
-@layer theme, base, legacy, components, utilities;
+@layer theme, base, components, utilities;
 
 @import "tailwindcss";
 @import "tw-animate-css";

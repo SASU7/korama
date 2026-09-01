@@ -1,9 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-// app/legacy.css carries the styles for components/PrototypeWorkspace.tsx only.
-// It is imported after globals.css and lives in the `legacy` cascade layer.
-// Delete both this import and the file in Phase 10.
-import "./legacy.css";
 import { fontVariables } from "@/app/fonts";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
