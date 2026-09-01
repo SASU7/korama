@@ -18,7 +18,7 @@ import { useWorkspaceLive } from "@/components/workspace/workspace-live-provider
 
 export function OperationsScreen() {
   const { state, run, busy, error, refresh } = useWorkspaceLive();
-  const { order, batches } = state;
+  const { order, batches, marketRuntime } = state;
 
   const eligible = batches.filter((batch) => batch.status === "eligible");
   const blocked = batches.filter((batch) =>
@@ -37,7 +37,7 @@ export function OperationsScreen() {
         meta={
           order
             ? `${order.reference} · ${order.lines.length} line(s) · ${order.itemCount} unit(s)`
-            : `${batches.length} batches at Accra · ${eligibleUnits} units eligible`
+            : `${batches.length} batches at ${marketRuntime.fulfilmentSiteName} · ${eligibleUnits} units eligible`
         }
         actions={
           order ? (
@@ -55,7 +55,7 @@ export function OperationsScreen() {
           // Operational facts, not a demo instruction. The previous copy read
           // "Complete the Nigerian shea checkout to activate the operator
           // workspace", which tells an operator nothing about their warehouse.
-          description={`Orders arrive here once Paystack confirms payment. Accra currently holds ${batches.length} batches, ${eligibleUnits} units eligible for allocation${blocked.length ? `, and ${blocked.length} blocked` : ""}.`}
+          description={`Orders arrive here once Paystack confirms payment. ${marketRuntime.fulfilmentSiteName} currently holds ${batches.length} batches, ${eligibleUnits} units eligible for allocation${blocked.length ? `, and ${blocked.length} blocked` : ""}.`}
           action={
             <Button variant="outline" asChild>
               <Link href="/shop">Open the shop</Link>

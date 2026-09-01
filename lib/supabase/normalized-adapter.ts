@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { badRequest, notFound } from "@/lib/errors";
-import { buildTelemetry, calculateQuote, resolveDeliveryMethod, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type DeliveryMethod, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
+import { buildTelemetry, calculateQuote, resolveDeliveryMethod, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type DeliveryMethod, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type MarketRuntimeConfig, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
 import { adminClient } from "@/lib/supabase/admin-client";
 
@@ -24,7 +24,20 @@ type NormalizedContext = {
   operations: NormalizedOperationalSnapshot;
   ghanaOperations: NormalizedOperationalSnapshot;
   products: Product[];
+  runtime: MarketRuntimeConfig;
+  activeOperations: NormalizedOperationalSnapshot;
 };
+
+type RuntimeConfigRow = Row<"market_configs"> & {
+  tax_rate_basis_points: number;
+  delivery_ghana_origin_minor: number;
+  delivery_direct_import_minor: number;
+  fulfilment_site_id: string | null;
+  delivery_origin_node_id: string | null;
+  delivery_destination_node_id: string | null;
+};
+
+const TEMA_ROUTE: [number, number][] = [[-0.0166, 5.6698], [0.002, 5.676], [0.02, 5.684]];
 
 function runtimeEnv(name: string) { return globalThis.process?.env?.[name]; }
 
@@ -75,9 +88,13 @@ function complianceForProduct(productIdValue: string, context: { batches: Row<"i
   } satisfies ComplianceSnapshot;
 }
 
-function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperationalSnapshot, ghanaOperations: NormalizedOperationalSnapshot): Product {
-  const allBatches = [...operations.batches, ...ghanaOperations.batches];
-  const batches = allBatches.filter((batch) => batch.product_id === item.product.id);
+function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperationalSnapshot, runtime: MarketRuntimeConfig): Product {
+  const allBatches = operations.batches;
+  const batches = allBatches.filter((batch) =>
+    batch.product_id === item.product.id &&
+    batch.operating_company_id === item.listing.operating_company_id &&
+    batch.site_id === runtime.fulfilmentSiteId
+  );
   // Mirror the FEFO predicate in korama_allocate_order_fefo. Sorting by expiry
   // alone surfaced the *expired* batch on the product page — the storefront
   // named NK-SB-2401 (expired 2026-08-02) while allocation would ship
@@ -101,9 +118,9 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
   const metadata = object(item.product.attributes);
   const compliance = complianceForProduct(item.product.id, {
     batches: allBatches,
-    assessments: [...operations.originAssessments, ...ghanaOperations.originAssessments],
-    dutyQuotes: [...operations.dutyQuotes, ...ghanaOperations.dutyQuotes],
-    certificates: [...operations.certificatePreviews, ...ghanaOperations.certificatePreviews],
+    assessments: operations.originAssessments,
+    dutyQuotes: operations.dutyQuotes,
+    certificates: operations.certificatePreviews,
     products: [item.product],
   });
   const available = allocatable.reduce((total, batch) => total + Math.max(0, batch.quantity - batch.allocated), 0);
@@ -120,8 +137,8 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
     currency,
     weightGrams: item.product.weight_grams,
     market: item.market.code === "GH" ? "GH" : "NG",
-    purchasable: item.listing.purchasable,
-    stockLabel: `${item.market.code === "GH" ? "Accra" : "Lekki"} · ${available} units`,
+    purchasable: item.listing.purchasable && runtime.checkoutEnabled && available > 0,
+    stockLabel: `${runtime.fulfilmentSiteName.replace(/ (domestic )?warehouse$/i, "")} · ${available} units`,
     batch: firstBatch?.reference ?? "Not assigned",
     expiry: firstBatch?.expiry_date ?? "No expiry",
     ingredients: text(metadata.ingredients),
@@ -137,18 +154,67 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
   };
 }
 
-async function loadContext(): Promise<NormalizedContext> {
+async function loadRuntime(client: ReturnType<typeof adminClient>, operatingCompanyId: string): Promise<MarketRuntimeConfig> {
+  const primaryMarketId = operatingCompanyId === NIGERIA_OPERATING_COMPANY_ID
+    ? NIGERIA_MARKET_ID
+    : GHANA_MARKET_ID;
+  const { data: rawConfig, error: configError } = await client.from("market_configs").select("*")
+    .eq("operating_company_id", operatingCompanyId)
+    .eq("market_id", primaryMarketId)
+    .maybeSingle();
+  if (configError || !rawConfig) throw new Error(`Market runtime config failed: ${configError?.message ?? "missing config"}`);
+  const config = rawConfig as unknown as RuntimeConfigRow;
+  const [{ data: market }, { data: site }, { data: origin }, { data: destination }] = await Promise.all([
+    client.from("markets").select("*").eq("id", config.market_id).single(),
+    client.from("sites").select("*").eq("id", config.fulfilment_site_id ?? "").single(),
+    client.from("ports_nodes").select("*").eq("id", config.delivery_origin_node_id ?? "").single(),
+    client.from("ports_nodes").select("*").eq("id", config.delivery_destination_node_id ?? "").single(),
+  ]);
+  if (!market || !site || !origin || !destination) throw new Error("Market runtime route is incomplete");
+  return {
+    marketId: market.id,
+    marketCode: market.code === "NG" ? "NG" : "GH",
+    operatingCompanyId,
+    currency: market.currency === "NGN" ? "NGN" : "GHS",
+    checkoutEnabled: config.checkout_enabled,
+    taxRateBasisPoints: config.tax_rate_basis_points,
+    deliveryGhanaOriginMinor: config.delivery_ghana_origin_minor,
+    deliveryDirectImportMinor: config.delivery_direct_import_minor,
+    fulfilmentSiteId: site.id,
+    fulfilmentSiteName: site.name,
+    deliveryOriginNodeId: origin.id,
+    deliveryOriginNodeName: origin.name,
+    deliveryDestinationNodeId: destination.id,
+    deliveryDestinationNodeName: destination.name,
+    routeCoordinates: market.code === "GH" ? TEMA_ROUTE : [],
+  };
+}
+
+async function loadContext(operatingCompanyId = GHANA_OPERATING_COMPANY_ID): Promise<NormalizedContext> {
   const client = adminClient();
   const repository = createNormalizedRepository(client);
-  const [ngItems, ghItems, operations, ghanaOperations] = await Promise.all([
+  const [ngItems, ghItems, operations, ghanaOperations, runtime] = await Promise.all([
     repository.listCatalogue("NG"),
     repository.listCatalogue("GH"),
     repository.getOperationalSnapshot(NIGERIA_OPERATING_COMPANY_ID),
     repository.getOperationalSnapshot(GHANA_OPERATING_COMPANY_ID),
+    loadRuntime(client, operatingCompanyId),
   ]);
   const items = [...ngItems, ...ghItems];
-  const products = [...new Map(items.map((item) => [item.product.id, toProduct(item, operations, ghanaOperations)])).values()];
-  return { repository, items, operations, ghanaOperations, products };
+  const operationsByCompany = new Map([
+    [NIGERIA_OPERATING_COMPANY_ID, operations],
+    [GHANA_OPERATING_COMPANY_ID, ghanaOperations],
+  ]);
+  const runtimeByCompany = new Map<string, MarketRuntimeConfig>([[operatingCompanyId, runtime]]);
+  if (!runtimeByCompany.has(GHANA_OPERATING_COMPANY_ID)) runtimeByCompany.set(GHANA_OPERATING_COMPANY_ID, await loadRuntime(client, GHANA_OPERATING_COMPANY_ID));
+  if (!runtimeByCompany.has(NIGERIA_OPERATING_COMPANY_ID)) runtimeByCompany.set(NIGERIA_OPERATING_COMPANY_ID, await loadRuntime(client, NIGERIA_OPERATING_COMPANY_ID));
+  const products = [...new Map(items.map((item) => {
+    const itemOperations = operationsByCompany.get(item.listing.operating_company_id) ?? ghanaOperations;
+    const itemRuntime = runtimeByCompany.get(item.listing.operating_company_id) ?? runtime;
+    return [item.product.id, toProduct(item, itemOperations, itemRuntime)];
+  })).values()];
+  const activeOperations = operationsByCompany.get(operatingCompanyId) ?? ghanaOperations;
+  return { repository, items, operations, ghanaOperations, products, runtime, activeOperations };
 }
 
 function baseCompliance(context: NormalizedContext): ComplianceSnapshot {
@@ -170,7 +236,7 @@ function baseCompliance(context: NormalizedContext): ComplianceSnapshot {
 const eventLabels: Record<OrderStatus, { label: string; detail: string }> = {
   pending_payment: { label: "Order created", detail: "Awaiting server-confirmed Paystack test payment" },
   paid: { label: "Payment verified", detail: "Amount and currency match the server quote" },
-  allocated: { label: "Batch allocated", detail: "FEFO selected the earliest valid Accra batch" },
+  allocated: { label: "Batch allocated", detail: "FEFO selected the earliest valid configured-site batch" },
   picked: { label: "Picked", detail: "Warehouse operator confirms scan" },
   packed: { label: "Packed", detail: "Weight captured for delivery routing" },
   dispatched: { label: "Dispatched", detail: "Handover to simulated last-mile delivery" },
@@ -194,13 +260,13 @@ function deliveryAddress(value: unknown): DeliveryAddress | undefined {
   return { recipientName: text(address.recipientName), addressLine: text(address.addressLine), city: text(address.city), countryCode: "GH" };
 }
 
-function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot): Shipment | null {
+function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot, runtime: MarketRuntimeConfig): Shipment | null {
   if (!view.shipment) return null;
   const legs: DeliveryLeg[] = view.deliveryLegs.filter((leg) => leg.mode !== "bulk_export").map((leg) => ({
     sequenceNo: leg.sequence_no,
     mode: leg.mode === "ground_courier" ? "ground_courier" : "simulated_drone",
-    origin: "Accra warehouse",
-    destination: "Fictional Accra micro-hub",
+    origin: runtime.deliveryOriginNodeName,
+    destination: runtime.deliveryDestinationNodeName,
     status: ["planned", "in_transit", "complete", "fallback"].includes(leg.status) ? leg.status as DeliveryLeg["status"] : "planned",
   }));
   return { reference: view.shipment.reference, status: view.shipment.status as Shipment["status"], legs, compliance };
@@ -208,9 +274,9 @@ function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot): 
 
 function toSortie(view: NormalizedOrderView, context: NormalizedContext): Sortie {
   const row = view.sortie;
-  const operational = view.order.operating_company_id === GHANA_OPERATING_COMPANY_ID
-    ? context.ghanaOperations
-    : context.operations;
+  const operational = view.order.operating_company_id === context.runtime.operatingCompanyId
+    ? context.activeOperations
+    : view.order.operating_company_id === GHANA_OPERATING_COMPANY_ID ? context.ghanaOperations : context.operations;
   const drone = row ? operational.drones.find((candidate) => candidate.id === row.drone_id) : undefined;
   const now = Date.now();
   const authorization = operational.authorizations.find((candidate) =>
@@ -241,15 +307,16 @@ function toSortie(view: NormalizedOrderView, context: NormalizedContext): Sortie
   ];
   const status = row?.status;
   const allowed = ["draft", "preflight", "cleared", "launched", "en_route", "delivered", "lockout", "abort", "return", "courier_fallback"].includes(status ?? "draft") ? status as Sortie["status"] : "draft";
-  const telemetry = allowed === "launched" ? [buildTelemetry()[0]] : ["en_route", "delivered"].includes(allowed) ? buildTelemetry() : [];
+  const routeTelemetry = buildTelemetry(context.runtime.deliveryOriginNodeName, context.runtime.deliveryDestinationNodeName);
+  const telemetry = allowed === "launched" ? [routeTelemetry[0]] : ["en_route", "delivered"].includes(allowed) ? routeTelemetry : [];
   const latestEvent = view.sortieEvents.at(-1);
   return { status: allowed, weather, telemetry, gates, fallbackReason: ["courier_fallback", "lockout", "abort", "return"].includes(allowed) ? latestEvent?.detail ?? "The simulated sortie stopped and a ground-courier leg was created" : undefined };
 }
 
-function taskState(view: NormalizedOrderView | null) {
+function taskState(view: NormalizedOrderView | null, runtime: MarketRuntimeConfig) {
   const byType = new Map(view?.tasks.map((task) => [task.task_type, task.status === "complete"]) ?? []);
   return [
-    { label: "Receive batch", detail: "NK-SB-2407 · 42 units at Lekki", done: true },
+    { label: "Receive batch", detail: `Current stock at ${runtime.fulfilmentSiteName}`, done: true },
     { label: "Allocate FEFO", detail: "Choose earliest valid, non-quarantined batch", done: byType.get("allocate") ?? false },
     { label: "Pick + scan", detail: "Confirm one unit against the pick list", done: byType.get("pick") ?? false },
     { label: "Pack + weigh", detail: "Capture 180g parcel weight", done: byType.get("pack") ?? false },
@@ -258,11 +325,27 @@ function taskState(view: NormalizedOrderView | null) {
 }
 
 function transferState(context: NormalizedContext): TransferStep[] {
-  const complete = context.operations.transfers.some((transfer) => transfer.status === "warehouse_received");
-  // The batch reference used to be a literal here too.
-  const originBatch = context.operations.batches.find(
-    (batch) => batch.inventory_class === "ghana_origin_export" && batch.origin_supported,
-  );
+  const complete = context.activeOperations.transfers.some((transfer) => transfer.status === "warehouse_received");
+  // Keep the displayed provenance aligned with the same eligible Tema stock
+  // that FEFO can allocate. Historical expired and quarantined batches remain
+  // visible in the inventory table, but must not headline the active chain.
+  const today = new Date().toISOString().slice(0, 10);
+  const originBatch = context.activeOperations.batches
+    .filter(
+      (batch) =>
+        batch.site_id === context.runtime.fulfilmentSiteId &&
+        batch.inventory_class === "ghana_origin_export" &&
+        batch.origin_supported &&
+        batch.customs_cleared &&
+        !batch.quarantined &&
+        (batch.expiry_date === null || batch.expiry_date >= today) &&
+        batch.quantity - batch.allocated > 0,
+    )
+    .sort(
+      (left, right) =>
+        (left.expiry_date ?? "9999-12-31").localeCompare(right.expiry_date ?? "9999-12-31") ||
+        left.id.localeCompare(right.id),
+    )[0];
   return [
     {
       label: "Ghana production",
@@ -271,9 +354,9 @@ function transferState(context: NormalizedContext): TransferStep[] {
         : "Transformation record on file",
       complete,
     },
-    { label: "Tema staging", detail: "Received into Ghana export staging", complete },
-    { label: "Bulk export", detail: "Cleared for export with provisional evidence", complete },
-    { label: "Lekki receipt", detail: "Destination stock received and reconciled", complete },
+    { label: "Tema staging", detail: "Received into Ghana staging", complete },
+    { label: "Domestic transfer", detail: "Released into the simulated local Tema corridor", complete },
+    { label: `${context.runtime.fulfilmentSiteName} receipt`, detail: "Destination stock received and reconciled", complete },
   ];
 }
 
@@ -296,7 +379,7 @@ function toState(context: NormalizedContext, view: NormalizedOrderView | null, r
   // Order lines, in line_no order. Ordering matters now: getOrderView used to
   // sort on a random uuid, which is invisible with one line and shuffles the
   // display on every request with three.
-  const batchByUuid = new Map(context.operations.batches.map((batch) => [batch.id, batch]));
+  const batchByUuid = new Map(context.activeOperations.batches.map((batch) => [batch.id, batch]));
   const orderLines: OrderLine[] = [...(view?.lines ?? [])]
     .sort((left, right) => (left.line_no ?? 1) - (right.line_no ?? 1))
     .map((row, index) => {
@@ -343,17 +426,20 @@ function toState(context: NormalizedContext, view: NormalizedOrderView | null, r
     productId: orderLines[0]?.productId ?? product?.id ?? "shea-balm",
     quantity: orderLines[0]?.quantity ?? line?.quantity ?? 1,
   } : null;
-  const shipment = toShipment(view ?? emptyOrderView(), compliance);
+  const shipment = toShipment(view ?? emptyOrderView(), compliance, context.runtime);
   return {
+    marketRuntime: context.runtime,
     products: context.products,
     selectedProductId: context.products.some((candidate) => candidate.id === "shea-balm") ? "shea-balm" : context.products[0]?.id ?? "",
     cart: [],
     order,
     shipment,
     orderEvents: view ? toOrderEvents(view.events, view.order.status as OrderStatus) : toOrderEvents([], "pending_payment"),
-    batches: staffView ? context.operations.batches.map((batch) => toBatch(batch, context, asOf)) : [],
+    batches: staffView ? context.activeOperations.batches
+      .filter((batch) => batch.site_id === context.runtime.fulfilmentSiteId)
+      .map((batch) => toBatch(batch, context, asOf)) : [],
     transfer: staffView ? transferState(context) : [],
-    tasks: staffView ? taskState(view) : [],
+    tasks: staffView ? taskState(view, context.runtime) : [],
     compliance,
     sortie: view ? toSortie(view, context) : emptySortie(),
     asOf,
@@ -389,7 +475,7 @@ function toBatch(batch: Row<"inventory_batches">, context: NormalizedContext, as
     productName: context.products.find(
       (product) => product.id === productIdFromUuid(context.items, batch.product_id),
     )?.name,
-    site: batch.operating_company_id === GHANA_OPERATING_COMPANY_ID ? "Accra warehouse" : "Lekki warehouse",
+    site: context.runtime.fulfilmentSiteName,
     expiry: batch.expiry_date ?? "No expiry",
     quantity: batch.quantity,
     allocated: batch.allocated,
@@ -405,18 +491,18 @@ function productIdFromUuid(items: NormalizedCatalogueItem[], uuid: string) { con
 function emptySortie(): Sortie { return { status: "draft", weather: "clear", telemetry: [], gates: [] }; }
 function emptyOrderView(): NormalizedOrderView { return { order: {} as Row<"orders">, lines: [], events: [], paymentAttempts: [], tasks: [], shipment: null, deliveryLegs: [], sortie: null, sortieEvents: [] }; }
 
-export async function readNormalizedState(profileId?: string, role?: UserRole) {
-  const context = await loadContext();
+export async function readNormalizedState(profileId?: string, role?: UserRole, operatingCompanyId = GHANA_OPERATING_COMPANY_ID) {
+  const context = await loadContext(operatingCompanyId);
   const view = role === "consumer" && !profileId
     ? null
-    : await context.repository.getLatestOrderView(GHANA_OPERATING_COMPANY_ID, role === "consumer" ? profileId : undefined);
+    : await context.repository.getLatestOrderView(operatingCompanyId, role === "consumer" ? profileId : undefined);
   return toState(context, view, role);
 }
 
-export async function readNormalizedOrder(reference: string, profileId?: string, role?: UserRole) {
+export async function readNormalizedOrder(reference: string, profileId?: string, role?: UserRole, operatingCompanyId?: string) {
   if (role === "consumer" && !profileId) return null;
-  const context = await loadContext();
-  const view = await context.repository.getOrderView(reference, role === "consumer" ? profileId : undefined, GHANA_OPERATING_COMPANY_ID);
+  const context = await loadContext(operatingCompanyId ?? GHANA_OPERATING_COMPANY_ID);
+  const view = await context.repository.getOrderView(reference, role === "consumer" ? profileId : undefined, operatingCompanyId);
   return view ? { view, state: toState(context, view, role) } : null;
 }
 
@@ -435,6 +521,7 @@ function resolvePilotLines(context: NormalizedContext, cart: CartLine[]) {
       throw badRequest(`Line ${index + 1}: this listing is not purchasable in Ghana`);
     const product = context.products.find((candidate) => candidate.id === productId(item));
     if (!product) throw badRequest(`Line ${index + 1}: the product was not found`);
+    if (!product.purchasable) throw badRequest(`Line ${index + 1}: this item is out of stock at ${context.runtime.fulfilmentSiteName}`);
     return { item, product, quantity: line.quantity };
   });
 }
@@ -446,7 +533,7 @@ function resolvePilotLines(context: NormalizedContext, cart: CartLine[]) {
 export async function normalizedQuote(cart: CartLine[]) {
   const context = await loadContext();
   const resolved = resolvePilotLines(context, cart);
-  const state = { products: context.products } as DemoState;
+  const state = { products: context.products, marketRuntime: context.runtime } as DemoState;
   const quote = calculateQuote(
     state,
     resolved.map((entry) => ({ productId: entry.product.id, quantity: entry.quantity })),
@@ -508,19 +595,19 @@ export async function normalizedVerifyPayment(orderId: string, providerReference
   return result;
 }
 
-export async function normalizedAllocate(reference: string) {
-  const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
+export async function normalizedAllocate(reference: string, operatingCompanyId: string) {
+  const context = await loadContext(operatingCompanyId);
+  if (!await context.repository.getOrderView(reference, undefined, operatingCompanyId)) throw notFound("Order not found in operator scope");
   return context.repository.allocateOrderFefo(reference);
 }
-export async function normalizedAdvance(reference: string, status: Extract<OrderStatus, "picked" | "packed" | "dispatched">, weightGrams?: number) {
-  const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
+export async function normalizedAdvance(reference: string, status: Extract<OrderStatus, "picked" | "packed" | "dispatched">, operatingCompanyId: string, weightGrams?: number) {
+  const context = await loadContext(operatingCompanyId);
+  if (!await context.repository.getOrderView(reference, undefined, operatingCompanyId)) throw notFound("Order not found in operator scope");
   return context.repository.advanceOrder(reference, status, weightGrams);
 }
-export async function normalizedCommand(reference: string, command: string) {
-  const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Shipment not found in safety scope");
+export async function normalizedCommand(reference: string, command: string, operatingCompanyId: string) {
+  const context = await loadContext(operatingCompanyId);
+  if (!await context.repository.getOrderView(reference, undefined, operatingCompanyId)) throw notFound("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
 }
 

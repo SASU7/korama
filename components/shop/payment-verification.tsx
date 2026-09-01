@@ -21,7 +21,7 @@ const MAX_ATTEMPTS = 5;
  * links — including the one labelled "View order" — pointed at /shop. It now
  * retries while Paystack settles and links to the real order.
  */
-export function PaymentVerification({ reference }: { reference: string }) {
+export function PaymentVerification({ reference, fulfilmentSiteName }: { reference: string; fulfilmentSiteName: string }) {
   const [state, setState] = useState<State>("checking");
   const [orderReference, setOrderReference] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +92,7 @@ export function PaymentVerification({ reference }: { reference: string }) {
               "This usually takes a few seconds."}
             {state === "confirmed" && (
               <>
-                Order <Identifier value={target} /> is with the Accra warehouse.
+                Order <Identifier value={target} /> is with the {fulfilmentSiteName}.
               </>
             )}
             {state === "pending" &&

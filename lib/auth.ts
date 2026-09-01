@@ -6,9 +6,15 @@ import type { UserRole } from "@/lib/domain";
 import type { Database } from "@/lib/supabase/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { applyPendingRoleAssignments } from "@/lib/supabase/role-admin";
+import {
+  GHANA_OPERATING_COMPANY_ID,
+  resolveActiveOperatingCompany,
+} from "@/lib/operating-company-scope";
+export { GHANA_OPERATING_COMPANY_ID, NIGERIA_OPERATING_COMPANY_ID, OPERATING_COMPANY_IDS } from "@/lib/operating-company-scope";
 export { trustedRequestOrigin } from "@/lib/request-security";
 
 export const ACTIVE_ROLE_COOKIE = "korama_active_role";
+export const ACTIVE_OPERATING_COMPANY_COOKIE = "korama_active_operating_company";
 export const APP_ROLES = [
   "consumer",
   "warehouse_operator",
@@ -28,6 +34,9 @@ export type AuthContext = {
   grantedRoles: UserRole[];
   activeRole: UserRole;
   isAdministrator: boolean;
+  operatingCompanyId: string;
+  marketId: string;
+  activeOperatingCompanyId: string;
 };
 
 /**
@@ -69,12 +78,13 @@ export async function authContext(): Promise<AuthContext | null> {
   } = await client.auth.getUser();
   if (error || !user) return null;
 
-  const { data: assignments, error: assignmentsError } = await client
-    .from("role_assignments")
-    .select("role")
-    .eq("profile_id", user.id);
+  const [{ data: assignments, error: assignmentsError }, { data: profile, error: profileError }] = await Promise.all([
+    client.from("role_assignments").select("role").eq("profile_id", user.id),
+    client.from("profiles").select("operating_company_id, market_id").eq("id", user.id).single(),
+  ]);
   if (assignmentsError)
     throw new Error("Your account roles could not be loaded");
+  if (profileError || !profile) throw new Error("Your operating-company profile could not be loaded");
 
   const grantedRoles = [
     ...new Set((assignments ?? []).map(({ role }) => role).filter(isAppRole)),
@@ -88,12 +98,22 @@ export async function authContext(): Promise<AuthContext | null> {
   // an admin to consumer would render Operations and Delivery empty until they
   // used the role switcher.
   const defaultRole: UserRole = isAdministrator ? "administrator" : "consumer";
-  const requestedRole = (await cookies()).get(ACTIVE_ROLE_COOKIE)?.value;
+  const jar = await cookies();
+  const requestedRole = jar.get(ACTIVE_ROLE_COOKIE)?.value;
   const activeRole =
     requestedRole && roles.includes(requestedRole as UserRole)
       ? (requestedRole as UserRole)
       : defaultRole;
-  return { user, roles, grantedRoles, activeRole, isAdministrator };
+  const requestedOperatingCompany = jar.get(ACTIVE_OPERATING_COMPANY_COOKIE)?.value;
+  const profileOperatingCompanyId = profile.operating_company_id ?? GHANA_OPERATING_COMPANY_ID;
+  const profileMarketId = profile.market_id ?? "20000000-0000-0000-0000-000000000001";
+  const activeOperatingCompanyId = resolveActiveOperatingCompany(profileOperatingCompanyId, requestedOperatingCompany, isAdministrator);
+  return {
+    user, roles, grantedRoles, activeRole, isAdministrator,
+    operatingCompanyId: profileOperatingCompanyId,
+    marketId: profileMarketId,
+    activeOperatingCompanyId,
+  };
 }
 
 export async function requireAuth(allowedRoles?: UserRole[]) {
@@ -136,8 +156,8 @@ export async function ensureConsumerProfile(user: User) {
     {
       id: user.id,
       display_name: displayName,
-      operating_company_id: "10000000-0000-0000-0000-000000000002",
-      market_id: "20000000-0000-0000-0000-000000000002",
+      operating_company_id: GHANA_OPERATING_COMPANY_ID,
+      market_id: "20000000-0000-0000-0000-000000000001",
     },
     { onConflict: "id" },
   );

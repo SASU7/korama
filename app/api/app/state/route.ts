@@ -8,6 +8,7 @@ export async function GET() {
   const state = await readNormalizedState(
     context?.user.id,
     context?.activeRole ?? "consumer",
+    context?.activeRole === "consumer" ? undefined : context?.activeOperatingCompanyId,
   );
   return Response.json(
     {

@@ -26,11 +26,13 @@ export async function POST(
     );
     if (cached) return Response.json(cached.body, { status: cached.status });
     const { reference } = await params;
-    await normalizedAllocate(reference);
+    const operatingCompanyId = auth.context.activeOperatingCompanyId;
+    await normalizedAllocate(reference, operatingCompanyId);
     const normalized = await readNormalizedOrder(
       reference,
       undefined,
       "warehouse_operator",
+      operatingCompanyId,
     );
     if (!normalized?.state.order)
       throw notFound("Order not found in operator scope");

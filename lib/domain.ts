@@ -126,11 +126,26 @@ export type OrderLine = {
 export const MAX_CART_LINES = 10;
 export const MAX_LINE_QUANTITY = 10;
 export const MAX_CART_QUANTITY = 30;
-export const TAX_RATE = 0.075;
-export const DELIVERY_GHANA_ORIGIN_MINOR = 450000;
-export const DELIVERY_DIRECT_IMPORT_MINOR = 550000;
 /** Simulated drone payload ceiling; above it, checkout routes to a courier. */
 export const DRONE_PAYLOAD_LIMIT_GRAMS = 2000;
+
+export type MarketRuntimeConfig = {
+  marketId: string;
+  marketCode: MarketCode;
+  operatingCompanyId: string;
+  currency: "GHS" | "NGN";
+  checkoutEnabled: boolean;
+  taxRateBasisPoints: number;
+  deliveryGhanaOriginMinor: number;
+  deliveryDirectImportMinor: number;
+  fulfilmentSiteId: string;
+  fulfilmentSiteName: string;
+  deliveryOriginNodeId: string;
+  deliveryOriginNodeName: string;
+  deliveryDestinationNodeId: string;
+  deliveryDestinationNodeName: string;
+  routeCoordinates: [number, number][];
+};
 
 export type OrderEvent = { status: OrderStatus; label: string; detail: string; at: string; complete: boolean };
 export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "GH" };
@@ -183,6 +198,7 @@ export type Order = {
 };
 
 export type DemoState = {
+  marketRuntime: MarketRuntimeConfig;
   products: Product[];
   selectedProductId: string;
   cart: { productId: string; quantity: number }[];
@@ -204,22 +220,22 @@ const money = (value: number) => Math.round(value);
 
 export const seedDemoState = (): DemoState => {
   const products: Product[] = [
-    { id: "shea-balm", name: "Nokware shea repair balm", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "A rich, fragrance-free shea balm made and pre-positioned in Accra.", priceMinor: 485000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Accra · 42 units", batch: "NK-SB-2407", expiry: "2027-01-07", ingredients: "Shea butter, baobab oil, vitamin E", transformation: "Blended, filled, labelled, and batch-tested in Ghana" },
-    { id: "shea-oil", name: "Nokware daily body oil", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "Lightweight Ghana-origin body oil for the everyday ritual.", priceMinor: 620000, currency: "GHS", weightGrams: 220, market: "GH", purchasable: true, stockLabel: "Accra · 18 units", batch: "NK-DO-2408", expiry: "2027-04-12", ingredients: "Baobab, moringa, sunflower oil", transformation: "Pressed, blended, filled, and batch-tested in Ghana" },
-    { id: "kente-tote", name: "Handwoven Kente market tote", category: "Fashion", producer: "Ahenema Weavers · Kumasi", origin: "ghana_origin_export", description: "A structured tote woven and finished by a small Kumasi workshop.", priceMinor: 950000, currency: "GHS", weightGrams: 420, market: "GH", purchasable: true, stockLabel: "Accra · 9 units", batch: "AW-KT-18", expiry: "No expiry", transformation: "Woven, cut, sewn, and finished in Ghana" },
-    { id: "cocoa-granola", name: "Cocoa nib breakfast granola", category: "Pantry", producer: "Atinka Foods · Tema", origin: "ghana_origin_export", description: "Small-batch granola with Ghana cocoa nibs; illustrative export stock.", priceMinor: 380000, currency: "GHS", weightGrams: 350, market: "GH", purchasable: true, stockLabel: "Accra · 26 units", batch: "AF-CG-2406", expiry: "2026-11-18", ingredients: "Oats, cocoa nibs, coconut, honey", transformation: "Mixed, baked, packed, and batch-tested in Ghana" },
-    { id: "direct-blender", name: "Compact kitchen blender", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana and cleared locally.", priceMinor: 2150000, currency: "GHS", weightGrams: 1900, market: "GH", purchasable: true, stockLabel: "Accra · 6 units", batch: "DI-GH-081", expiry: "No expiry" },
-    { id: "direct-scarf", name: "Linen travel scarf", category: "Fashion", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "A direct-import comparison product; it carries no Ghana-origin claim.", priceMinor: 730000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Accra · 14 units", batch: "DI-GH-074", expiry: "No expiry" },
-    { id: "ghana-basket", name: "Bolga storage basket", category: "Home & craft", producer: "Tamale Basket Collective · Ghana", origin: "ghana_origin_export", description: "Hand-finished storage basket from a northern Ghana co-operative.", priceMinor: 760000, currency: "GHS", weightGrams: 650, market: "GH", purchasable: true, stockLabel: "Accra · 5 units", batch: "TB-24-11", expiry: "No expiry", transformation: "Woven and finished in Ghana" },
-    { id: "ghana-cocoa", name: "Single-origin cocoa powder", category: "Pantry", producer: "Volta Cocoa Works · Ghana", origin: "ghana_origin_export", description: "Ghana-origin pantry staple; illustrative market listing.", priceMinor: 440000, currency: "GHS", weightGrams: 500, market: "GH", purchasable: true, stockLabel: "Accra · 31 units", batch: "VCW-2409", expiry: "2027-02-04", ingredients: "100% cocoa", transformation: "Fermented, roasted, milled, and packed in Ghana" },
-    { id: "direct-lamp", name: "Rattan reading lamp", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana for local sale.", priceMinor: 1120000, currency: "GHS", weightGrams: 1100, market: "GH", purchasable: true, stockLabel: "Accra · 8 units", batch: "DI-GH-033", expiry: "No expiry" },
+    { id: "shea-balm", name: "Nokware shea repair balm", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "A rich, fragrance-free shea balm held for the Tema pilot.", priceMinor: 485000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Tema · 42 units", batch: "NK-SB-2407", expiry: "2027-01-07", ingredients: "Shea butter, baobab oil, vitamin E", transformation: "Blended, filled, labelled, and batch-tested in Ghana" },
+    { id: "shea-oil", name: "Nokware daily body oil", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "Lightweight Ghana-origin body oil for the everyday ritual.", priceMinor: 620000, currency: "GHS", weightGrams: 220, market: "GH", purchasable: true, stockLabel: "Tema · 18 units", batch: "NK-DO-2408", expiry: "2027-04-12", ingredients: "Baobab, moringa, sunflower oil", transformation: "Pressed, blended, filled, and batch-tested in Ghana" },
+    { id: "kente-tote", name: "Handwoven Kente market tote", category: "Fashion", producer: "Ahenema Weavers · Kumasi", origin: "ghana_origin_export", description: "A structured tote woven and finished by a small Kumasi workshop.", priceMinor: 950000, currency: "GHS", weightGrams: 420, market: "GH", purchasable: true, stockLabel: "Tema · 9 units", batch: "AW-KT-18", expiry: "No expiry", transformation: "Woven, cut, sewn, and finished in Ghana" },
+    { id: "cocoa-granola", name: "Cocoa nib breakfast granola", category: "Pantry", producer: "Atinka Foods · Tema", origin: "ghana_origin_export", description: "Small-batch granola with Ghana cocoa nibs; illustrative pilot stock.", priceMinor: 380000, currency: "GHS", weightGrams: 350, market: "GH", purchasable: true, stockLabel: "Tema · 26 units", batch: "AF-CG-2406", expiry: "2026-11-18", ingredients: "Oats, cocoa nibs, coconut, honey", transformation: "Mixed, baked, packed, and batch-tested in Ghana" },
+    { id: "direct-blender", name: "Compact kitchen blender", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana and cleared locally.", priceMinor: 2150000, currency: "GHS", weightGrams: 1900, market: "GH", purchasable: true, stockLabel: "Tema · 6 units", batch: "DI-GH-081", expiry: "No expiry" },
+    { id: "direct-scarf", name: "Linen travel scarf", category: "Fashion", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "A direct-import comparison product; it carries no Ghana-origin claim.", priceMinor: 730000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Tema · 14 units", batch: "DI-GH-074", expiry: "No expiry" },
+    { id: "ghana-basket", name: "Bolga storage basket", category: "Home & craft", producer: "Tamale Basket Collective · Ghana", origin: "ghana_origin_export", description: "Hand-finished storage basket from a northern Ghana co-operative.", priceMinor: 760000, currency: "GHS", weightGrams: 650, market: "GH", purchasable: true, stockLabel: "Tema · 5 units", batch: "TB-24-11", expiry: "No expiry", transformation: "Woven and finished in Ghana" },
+    { id: "ghana-cocoa", name: "Single-origin cocoa powder", category: "Pantry", producer: "Volta Cocoa Works · Ghana", origin: "ghana_origin_export", description: "Ghana-origin pantry staple; illustrative market listing.", priceMinor: 440000, currency: "GHS", weightGrams: 500, market: "GH", purchasable: true, stockLabel: "Tema · 31 units", batch: "VCW-2409", expiry: "2027-02-04", ingredients: "100% cocoa", transformation: "Fermented, roasted, milled, and packed in Ghana" },
+    { id: "direct-lamp", name: "Rattan reading lamp", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana for local sale.", priceMinor: 1120000, currency: "GHS", weightGrams: 1100, market: "GH", purchasable: true, stockLabel: "Tema · 8 units", batch: "DI-GH-033", expiry: "No expiry" },
     { id: "future-marketplace", name: "Future maker marketplace listing", category: "Home & craft", producer: "Third-party seller · roadmap", origin: "marketplace_future", description: "A roadmap-only seller listing; settlement is not enabled in this prototype.", priceMinor: 0, currency: "GHS", weightGrams: 100, market: "GH", purchasable: false, stockLabel: "Future capability", batch: "Not assigned", expiry: "No expiry" },
   ];
 
   const initialEvents: OrderEvent[] = [
     { status: "pending_payment", label: "Order created", detail: "Awaiting server-confirmed Paystack test payment", at: now, complete: false },
     { status: "paid", label: "Payment verified", detail: "Amount and currency match the server quote", at: "", complete: false },
-    { status: "allocated", label: "Batch allocated", detail: "FEFO selected the earliest valid Accra batch", at: "", complete: false },
+    { status: "allocated", label: "Batch allocated", detail: "FEFO selected the earliest valid Tema batch", at: "", complete: false },
     { status: "picked", label: "Picked", detail: "Warehouse operator confirms scan", at: "", complete: false },
     { status: "packed", label: "Packed", detail: "Weight captured for delivery routing", at: "", complete: false },
     { status: "dispatched", label: "Dispatched", detail: "Handover to simulated last-mile delivery", at: "", complete: false },
@@ -227,6 +243,23 @@ export const seedDemoState = (): DemoState => {
   ];
 
   return {
+    marketRuntime: {
+      marketId: "20000000-0000-0000-0000-000000000001",
+      marketCode: "GH",
+      operatingCompanyId: "10000000-0000-0000-0000-000000000001",
+      currency: "GHS",
+      checkoutEnabled: true,
+      taxRateBasisPoints: 750,
+      deliveryGhanaOriginMinor: 4500,
+      deliveryDirectImportMinor: 5500,
+      fulfilmentSiteId: "42000000-0000-0000-0000-000000000021",
+      fulfilmentSiteName: "Tema domestic warehouse",
+      deliveryOriginNodeId: "40000000-0000-0000-0000-000000000021",
+      deliveryOriginNodeName: "Tema domestic warehouse",
+      deliveryDestinationNodeId: "40000000-0000-0000-0000-000000000022",
+      deliveryDestinationNodeName: "Fictional Tema micro-hub",
+      routeCoordinates: [[-0.0166, 5.6698], [0.002, 5.676], [0.02, 5.684]],
+    },
     products,
     selectedProductId: "shea-balm",
     cart: [],
@@ -234,18 +267,18 @@ export const seedDemoState = (): DemoState => {
     shipment: null,
     orderEvents: initialEvents,
     batches: [
-      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Accra warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "expired" },
-      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Accra warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "eligible" },
-      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Accra warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true, status: "quarantined" },
+      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Tema domestic warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "expired" },
+      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Tema domestic warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "eligible" },
+      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Tema domestic warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true, status: "quarantined" },
     ],
     transfer: [
       { label: "Ghana production", detail: "Transformation record linked to NK-SB-2407", complete: true },
       { label: "Tema staging", detail: "Received into Ghana export staging", complete: true },
       { label: "Bulk export", detail: "Cleared for export with provisional evidence", complete: true },
-      { label: "Accra receipt", detail: "Destination stock received and reconciled", complete: true },
+      { label: "Tema warehouse receipt", detail: "Destination stock received and reconciled", complete: true },
     ],
     tasks: [
-      { label: "Receive batch", detail: "NK-SB-2407 · 42 units at Accra", done: true },
+      { label: "Receive batch", detail: "NK-SB-2407 · 42 units at Tema", done: true },
       { label: "Allocate FEFO", detail: "Choose earliest valid, non-quarantined batch", done: false },
       { label: "Pick + scan", detail: "Confirm one unit against the pick list", done: false },
       { label: "Pack + weigh", detail: "Capture 180g parcel weight", done: false },
@@ -354,7 +387,7 @@ export function apportionDelivery(subtotals: number[], deliveryMinor: number): n
  * Delivery is an order-level cost — one parcel to one address — so a mixed
  * cart pays the higher of the two rates rather than the sum of them.
  */
-export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
+export function calculateQuote(state: DemoState, cart: CartLine[], policy = state.marketRuntime): Quote {
   const lines: QuoteLine[] = cart.map((line) => {
     const product = getProduct(state, line.productId);
     const subtotalMinor = money(product.priceMinor * line.quantity);
@@ -363,7 +396,7 @@ export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
       quantity: line.quantity,
       unitPriceMinor: product.priceMinor,
       subtotalMinor,
-      taxMinor: money(subtotalMinor * TAX_RATE),
+      taxMinor: money((subtotalMinor * policy.taxRateBasisPoints) / 10_000),
       deliveryMinor: 0,
       origin: product.origin,
     };
@@ -371,8 +404,8 @@ export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
 
   const hasDirectImport = lines.some((line) => line.origin !== "ghana_origin_export");
   const deliveryMinor = hasDirectImport
-    ? DELIVERY_DIRECT_IMPORT_MINOR
-    : DELIVERY_GHANA_ORIGIN_MINOR;
+    ? policy.deliveryDirectImportMinor
+    : policy.deliveryGhanaOriginMinor;
   const shares = apportionDelivery(lines.map((line) => line.subtotalMinor), deliveryMinor);
   lines.forEach((line, index) => {
     line.deliveryMinor = shares[index];
@@ -386,7 +419,7 @@ export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
     taxMinor,
     deliveryMinor,
     totalMinor: subtotalMinor + taxMinor + deliveryMinor,
-    currency: "GHS" as const,
+    currency: policy.currency,
     itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
   };
 }
@@ -425,7 +458,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   if (allowed[state.order.status] !== status) throw conflict(`Order cannot advance from ${state.order.status} to ${status}`);
   state.order.status = status;
   if (status === "packed" && !state.shipment) {
-    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: state.order.deliveryMethod, origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
+    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: state.order.deliveryMethod, origin: state.marketRuntime.deliveryOriginNodeName, destination: state.marketRuntime.deliveryDestinationNodeName, status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
   }
   if (status === "dispatched" && state.shipment) {
     state.shipment.status = "in_transit";
@@ -490,11 +523,11 @@ export function allocateCartFefo(state: DemoState) {
   markOrder(state, "allocated");
   return planned;
 }
-export function buildTelemetry() { return [
-  { point: "Accra launch pad", altitude: 0, speed: 0, battery: 94, link: "Strong" },
-  { point: "Accra corridor", altitude: 82, speed: 34, battery: 88, link: "Strong" },
+export function buildTelemetry(originName = "Tema domestic warehouse", destinationName = "Fictional Tema micro-hub") { return [
+  { point: `${originName} launch pad`, altitude: 0, speed: 0, battery: 94, link: "Strong" },
+  { point: "Tema simulated corridor", altitude: 82, speed: 34, battery: 88, link: "Strong" },
   { point: "Coastal waypoint", altitude: 96, speed: 39, battery: 79, link: "Strong" },
-  { point: "Fictional micro-hub", altitude: 0, speed: 0, battery: 71, link: "Strong" },
+  { point: destinationName, altitude: 0, speed: 0, battery: 71, link: "Strong" },
 ]; }
 export type SortieCommand = "preflight" | "launch" | "advance" | "inject_weather" | "reset_weather" | "fallback" | "abort" | "complete";
 
@@ -504,7 +537,7 @@ function setCourierFallback(state: DemoState) {
   state.shipment.status = "fallback";
   state.shipment.legs = [
     ...state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "fallback" as const })),
-    existingCourierLeg ? { ...existingCourierLeg, status: "in_transit" as const } : { sequenceNo: state.shipment.legs.length + 1, mode: "ground_courier" as const, origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" as const },
+    existingCourierLeg ? { ...existingCourierLeg, status: "in_transit" as const } : { sequenceNo: state.shipment.legs.length + 1, mode: "ground_courier" as const, origin: state.marketRuntime.deliveryOriginNodeName, destination: state.marketRuntime.deliveryDestinationNodeName, status: "in_transit" as const },
   ];
 }
 
@@ -526,6 +559,6 @@ export function sortieCommand(state: DemoState, command: SortieCommand) {
   }
   if (command === "complete") { if (state.sortie.status !== "en_route") throw conflict("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
   if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw conflict("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }
-  if (command === "launch") { if (state.sortie.status !== "cleared") throw conflict("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry()[0]]; return; }
-  if (command === "advance") { if (state.sortie.status !== "launched") throw conflict("Launch the sortie before advancing telemetry"); state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry(); return; }
+  if (command === "launch") { if (state.sortie.status !== "cleared") throw conflict("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry(state.marketRuntime.deliveryOriginNodeName, state.marketRuntime.deliveryDestinationNodeName)[0]]; return; }
+  if (command === "advance") { if (state.sortie.status !== "launched") throw conflict("Launch the sortie before advancing telemetry"); state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry(state.marketRuntime.deliveryOriginNodeName, state.marketRuntime.deliveryDestinationNodeName); return; }
 }

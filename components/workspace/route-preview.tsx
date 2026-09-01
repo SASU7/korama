@@ -1,6 +1,7 @@
 "use client";
 
 import { MapboxRoutePreview } from "@/components/workspace/mapbox-route";
+import type { MarketRuntimeConfig } from "@/lib/domain";
 
 /**
  * Mapbox with a CSS-only fallback, kept from the original implementation:
@@ -8,10 +9,10 @@ import { MapboxRoutePreview } from "@/components/workspace/mapbox-route";
  * cleanup all still apply. Wrapped here so the delivery screen does not
  * depend on the legacy module directly once it is deleted.
  */
-export function RoutePreview() {
+export function RoutePreview({ runtime }: { runtime: MarketRuntimeConfig }) {
   return (
     <div className="overflow-hidden rounded-lg border">
-      <MapboxRoutePreview />
+      <MapboxRoutePreview runtime={runtime} />
     </div>
   );
 }

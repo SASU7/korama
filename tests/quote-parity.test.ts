@@ -15,14 +15,16 @@ import {
   apportionDelivery,
   calculateQuote,
   cartWeightGrams,
-  DELIVERY_DIRECT_IMPORT_MINOR,
-  DELIVERY_GHANA_ORIGIN_MINOR,
   MAX_CART_LINES,
   MAX_CART_QUANTITY,
   normalizeCart,
   seedDemoState,
-  TAX_RATE,
 } from "../lib/domain.ts";
+
+const RUNTIME = seedDemoState().marketRuntime;
+const TAX_RATE = RUNTIME.taxRateBasisPoints / 10_000;
+const DELIVERY_GHANA_ORIGIN_MINOR = RUNTIME.deliveryGhanaOriginMinor;
+const DELIVERY_DIRECT_IMPORT_MINOR = RUNTIME.deliveryDirectImportMinor;
 
 /** Seeded cedi prices, for readability in the expectations below. */
 const PRICE = { "shea-balm": 485000, "shea-oil": 620000, "direct-scarf": 730000 };
@@ -31,12 +33,12 @@ export const PARITY_CASES = [
   {
     name: "single Ghana-origin line",
     cart: [{ productId: "shea-balm", quantity: 1 }],
-    expect: { subtotal: 485000, tax: 36375, delivery: DELIVERY_GHANA_ORIGIN_MINOR, total: 971375 },
+    expect: { subtotal: 485000, tax: 36375, delivery: DELIVERY_GHANA_ORIGIN_MINOR, total: 525875 },
   },
   {
     name: "single line, quantity 2",
     cart: [{ productId: "shea-balm", quantity: 2 }],
-    expect: { subtotal: 970000, tax: 72750, delivery: DELIVERY_GHANA_ORIGIN_MINOR, total: 1492750 },
+    expect: { subtotal: 970000, tax: 72750, delivery: DELIVERY_GHANA_ORIGIN_MINOR, total: 1047250 },
   },
   {
     name: "two Ghana-origin lines keep the lower delivery rate",
@@ -115,7 +117,7 @@ test("line figures reconcile to the order figures exactly", () => {
 test("delivery apportionment never loses or invents a minor unit", () => {
   // Deliberately awkward splits: primes, zeros, and a single line.
   for (const subtotals of [[1], [1, 1, 1], [7, 11, 13], [0, 0], [999999, 1], [3, 3, 3, 3, 3, 3, 3]]) {
-    for (const fee of [450000, 550000, 1, 7]) {
+    for (const fee of [4500, 5500, 1, 7]) {
       const parts = apportionDelivery(subtotals, fee);
       assert.equal(parts.length, subtotals.length);
       assert.equal(

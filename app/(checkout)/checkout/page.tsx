@@ -35,6 +35,7 @@ export default async function CheckoutPage() {
         cart={known}
         quote={quote}
         weightGrams={cartWeightGrams(state, known)}
+        destinationName={state.marketRuntime.deliveryDestinationNodeName}
       />
     </>
   );
