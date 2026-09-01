@@ -1,51 +1,81 @@
-import { createHmac } from "node:crypto";
-import { hydrateDemoStore, persistDemoStore, recordDemoAudit, verifyDemoPayment } from "@/lib/demo-store";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { validatedBusinessReference } from "@/lib/api";
-import { isHostedEnvironment } from "@/lib/demo-auth";
-import { normalizedRepositoryEnabled, normalizedVerifyPayment, readNormalizedOrder } from "@/lib/supabase/normalized-adapter";
+import { recordAudit } from "@/lib/persistence";
+import { paystackSecret } from "@/lib/paystack";
+import {
+  normalizedVerifyPayment,
+  readNormalizedOrder,
+} from "@/lib/supabase/normalized-adapter";
 
 export async function POST(request: Request) {
   try {
-    const signature = request.headers.get("x-paystack-signature");
+    const secret = paystackSecret();
+    const signature = request.headers.get("x-paystack-signature") ?? "";
     const rawBody = await request.text();
-    if (rawBody.length > 128 * 1024) return Response.json({ error: "Webhook body is too large" }, { status: 413 });
-    if (isHostedEnvironment() && !process.env.PAYSTACK_WEBHOOK_SECRET) return Response.json({ error: "Webhook verification is not configured" }, { status: 503 });
-    const secret = process.env.PAYSTACK_WEBHOOK_SECRET ?? "demo-paystack-webhook-secret";
-    const expected = createHmac("sha512", secret).update(rawBody).digest("hex");
-    if (!signature || !createHmac("sha512", secret).update(rawBody).digest().equals(Buffer.from(signature, "hex"))) return Response.json({ error: "Invalid webhook signature" }, { status: 401 });
-    const body = JSON.parse(rawBody) as Record<string, unknown>;
-    const data = (body.data ?? {}) as Record<string, unknown>;
-    if (normalizedRepositoryEnabled()) {
-      if (body.event !== "charge.success" || data.status !== "success") throw new Error("Only successful Paystack charge events are accepted");
-      const reference = validatedBusinessReference(data.reference);
-      const amount = Number(data.amount);
-      const currency = String(data.currency ?? "").trim().toUpperCase();
-      if (!reference || !Number.isFinite(amount) || !currency) throw new Error("Successful Paystack events must include reference, amount, and currency");
-      const orderReference = reference.startsWith("PSK-DEMO-") ? reference.slice("PSK-DEMO-".length) : reference.replace(/^KOR-/, "");
-      const current = await readNormalizedOrder(orderReference);
-      if (!current?.state.order) throw new Error("No pending order exists");
-      const result = await normalizedVerifyPayment(current.view.order.id, reference, amount, currency);
-      const refreshed = await readNormalizedOrder(orderReference);
-      if (!refreshed?.state.order) throw new Error("Verified order could not be read back");
-      await recordDemoAudit("payment_webhook_received", "order", { reference: refreshed.state.order.reference, paymentReference: reference, amount, currency, adapter: "normalized" });
-      return Response.json({ received: true, idempotent: objectValue(result, "idempotent") === true, serverSignatureVerified: signature === expected, order: refreshed.state.order });
-    }
-    const state = await hydrateDemoStore();
-    if (!state.order) throw new Error("No pending order exists");
-    const alreadyPaid = state.order.status !== "pending_payment";
-    if (body.event !== "charge.success" || data.status !== "success") throw new Error("Only successful Paystack charge events are accepted");
-    const reference = validatedBusinessReference(data.reference);
-    const amount = Number(data.amount);
-    const currency = String(data.currency ?? "").trim().toUpperCase();
-    if (!reference || !Number.isFinite(amount) || !currency) throw new Error("Successful Paystack events must include reference, amount, and currency");
-    const order = verifyDemoPayment(reference, amount, currency);
-    await persistDemoStore();
-    await recordDemoAudit("payment_webhook_received", "order", { reference: order.reference, paymentReference: reference, amount, currency });
-    return Response.json({ received: true, idempotent: alreadyPaid, serverSignatureVerified: signature === expected, order });
-  } catch (error) {
-    const message = isHostedEnvironment() ? "Webhook rejected" : error instanceof Error ? error.message : "Unexpected webhook error";
-    return Response.json({ error: message }, { status: 400, headers: { "cache-control": "no-store" } });
+    if (rawBody.length > 128 * 1024)
+      return Response.json(
+        { error: "Webhook body is too large" },
+        { status: 413 },
+      );
+    const expected = createHmac("sha512", secret).update(rawBody).digest();
+    const received = /^[a-f0-9]{128}$/i.test(signature)
+      ? Buffer.from(signature, "hex")
+      : Buffer.alloc(0);
+    if (
+      received.length !== expected.length ||
+      !timingSafeEqual(received, expected)
+    )
+      return Response.json(
+        { error: "Invalid webhook signature" },
+        { status: 401 },
+      );
+    const body = JSON.parse(rawBody) as {
+      event?: string;
+      data?: {
+        status?: string;
+        reference?: unknown;
+        amount?: unknown;
+        currency?: unknown;
+      };
+    };
+    if (body.event !== "charge.success" || body.data?.status !== "success")
+      return Response.json({ received: true, ignored: true });
+    const reference = validatedBusinessReference(body.data.reference);
+    const orderReference = reference.replace(/^KOR-/, "");
+    const amount = Number(body.data.amount);
+    const currency = String(body.data.currency ?? "")
+      .trim()
+      .toUpperCase();
+    if (!Number.isFinite(amount) || !currency)
+      throw new Error("Paystack event is missing amount or currency");
+    const current = await readNormalizedOrder(orderReference);
+    if (!current?.state.order) throw new Error("Order not found");
+    const result = await normalizedVerifyPayment(
+      current.view.order.id,
+      reference,
+      amount,
+      currency,
+    );
+    await recordAudit("payment_webhook_received", "order", {
+      reference: orderReference,
+      paymentReference: reference,
+      amount,
+      currency,
+    });
+    return Response.json({
+      received: true,
+      idempotent: objectValue(result, "idempotent") === true,
+    });
+  } catch {
+    return Response.json(
+      { error: "Webhook rejected" },
+      { status: 400, headers: { "cache-control": "no-store" } },
+    );
   }
 }
 
-function objectValue(value: unknown, key: string) { return value && typeof value === "object" && key in value ? (value as Record<string, unknown>)[key] : undefined; }
+function objectValue(value: unknown, key: string) {
+  return value && typeof value === "object" && key in value
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}

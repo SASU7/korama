@@ -72,7 +72,7 @@ begin
     'transformation', oa.transformation_summary,
     'evidence', oa.evidence,
     'dutyQuote', coalesce(dq.quote, oa.duty_quote),
-    'certificateWatermark', coalesce(cp.watermark, 'DEMO — NOT A VALID CERTIFICATE')
+    'certificateWatermark', coalesce(cp.watermark, 'PREVIEW — NOT A VALID CERTIFICATE')
   ) into compliance_snapshot
     from public.origin_assessments oa
     join public.inventory_batches ib on ib.id = oa.batch_id

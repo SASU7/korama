@@ -5,8 +5,6 @@ const staticDirectory = join(process.cwd(), ".next", "static");
 const forbidden = [
   ["Supabase service-role key reference", /SUPABASE_SERVICE_ROLE_KEY/i],
   ["Paystack secret reference", /PAYSTACK_SECRET_KEY/i],
-  ["Paystack webhook secret reference", /PAYSTACK_WEBHOOK_SECRET/i],
-  ["demo session secret reference", /KORAMA_DEMO_SESSION_SECRET/i],
   ["secret Supabase key", /sb_secret_[A-Za-z0-9_-]+/],
   ["Paystack secret value", /(?:sk_test_|sk_live_|whsec_)[A-Za-z0-9_-]+/],
 ];

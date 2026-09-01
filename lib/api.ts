@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { isProductionLike } from "@/lib/demo-auth";
 
 export async function jsonBody(request: Request) {
   const raw = await request.text();
@@ -26,10 +25,11 @@ export function validatedEmail(value: unknown, fallback: string) {
 export function apiError(error: unknown, request?: Request) {
   const suppliedRequestId = request?.headers.get("x-request-id")?.trim() || "";
   const requestId = /^[A-Za-z0-9._:-]{1,128}$/.test(suppliedRequestId) ? suppliedRequestId : randomUUID();
-  const detail = error instanceof Error ? error.message : "Unexpected demo error";
-  const message = isProductionLike()
+  const detail = error instanceof Error ? error.message : "Unexpected request error";
+  const production = process.env.NODE_ENV === "production";
+  const message = production
     ? "The request could not be completed"
     : detail;
-  console.error(JSON.stringify({ event: "api_error", requestId, method: request?.method, path: request ? new URL(request.url).pathname : undefined, message: isProductionLike() ? "request_failed" : detail }));
+  console.error(JSON.stringify({ event: "api_error", requestId, method: request?.method, path: request ? new URL(request.url).pathname : undefined, message: production ? "request_failed" : detail }));
   return Response.json({ error: message, requestId }, { status: 400, headers: { "x-request-id": requestId, "cache-control": "no-store" } });
 }

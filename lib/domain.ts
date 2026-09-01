@@ -114,12 +114,12 @@ export const seedDemoState = (): DemoState => {
       { label: "Pack + weigh", detail: "Capture 180g parcel weight", done: false },
       { label: "Dispatch", detail: "Hand parcel to delivery router", done: false },
     ],
-    compliance: { assessment: "provisionally_eligible", evidence: ["Producer invoice · Nokware Skincare", "Transformation log · batch NK-SB-2407", "Input ledger · Ghana shea butter", "Batch test summary · illustrative"], transformation: "Blended, filled, labelled, and batch-tested in Ghana. Repackaging alone would be rejected.", dutyQuote: "Illustrative: Ghana-origin qualification → duty treatment awaiting pilot validation", certificateWatermark: "DEMO — NOT A VALID CERTIFICATE" },
+    compliance: { assessment: "provisionally_eligible", evidence: ["Producer invoice · Nokware Skincare", "Transformation log · batch NK-SB-2407", "Input ledger · Ghana shea butter", "Batch test summary · illustrative"], transformation: "Blended, filled, labelled, and batch-tested in Ghana. Repackaging alone would be rejected.", dutyQuote: "Illustrative: Ghana-origin qualification → duty treatment awaiting pilot validation", certificateWatermark: "PREVIEW — NOT A VALID CERTIFICATE" },
     sortie: { status: "draft", weather: "clear", telemetry: [], gates: [
       { key: "payload", label: "Payload", detail: "180g / 2kg simulated limit", passed: true },
       { key: "aircraft", label: "Aircraft condition", detail: "KOR-D01 · airworthiness current", passed: true },
       { key: "authorization", label: "Authorization window", detail: "Simulated Nigerian authorization on file", passed: true },
-      { key: "weather", label: "Weather", detail: "Wind and rain below demo threshold", passed: true },
+      { key: "weather", label: "Weather", detail: "Wind and rain below the configured threshold", passed: true },
       { key: "geofence", label: "Geofence", detail: "Route avoids restricted corridors", passed: true },
       { key: "battery", label: "Battery", detail: "94% · reserve protected", passed: true },
       { key: "override", label: "Manual override", detail: "Safety officer control available", passed: true },
@@ -138,7 +138,7 @@ export function validateDeliveryAddress(value: unknown): DeliveryAddress {
   if (recipientName.length < 2) throw new Error("Enter the recipient name");
   if (addressLine.length < 5) throw new Error("Enter a delivery address");
   if (city.length < 2) throw new Error("Enter the delivery city");
-  if (countryCode !== "NG") throw new Error("The demo checkout is scoped to Nigeria");
+  if (countryCode !== "NG") throw new Error("Checkout is currently available only for Nigerian delivery addresses");
   return { recipientName, addressLine, city, countryCode: "NG" };
 }
 export function normalizeQuantity(value: unknown): number {
@@ -164,9 +164,9 @@ export function assessOrigin(transformation: string, evidence: string[]): Origin
   if (!hasTransformation || evidenceCount < 2) return { status: "rejected", reason: "Transformation and supporting evidence are insufficient" };
   return { status: "provisionally_eligible", reason: "Transformation and supporting evidence are present; pilot validation remains required" };
 }
-export function selectFefoBatch(state: DemoState, productId: string) {
+export function selectFefoBatch(state: DemoState, productId: string, quantity = 1) {
   const today = new Date("2026-08-29T00:00:00.000Z").getTime();
-  return state.batches.filter((batch) => batch.productId === productId && batch.quantity > batch.allocated && !batch.quarantined && batch.cleared && batch.originSupported && new Date(batch.expiry).getTime() > today).sort((a, b) => a.expiry.localeCompare(b.expiry))[0] ?? null;
+  return state.batches.filter((batch) => batch.productId === productId && batch.quantity - batch.allocated >= quantity && !batch.quarantined && batch.cleared && batch.originSupported && new Date(batch.expiry).getTime() > today).sort((a, b) => a.expiry.localeCompare(b.expiry))[0] ?? null;
 }
 function stamp() { return new Date().toISOString(); }
 export function markOrder(state: DemoState, status: OrderStatus) {
@@ -191,7 +191,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
 }
 export function allocateFefo(state: DemoState) {
   if (!state.order || state.order.status !== "paid") throw new Error("Only a paid order can be allocated");
-  const batch = selectFefoBatch(state, state.order.productId);
+  const batch = selectFefoBatch(state, state.order.productId, state.order.quantity);
   if (!batch) throw new Error("No valid, non-quarantined, uncleared stock is available");
   batch.allocated += state.order.quantity;
   state.tasks[1].done = true;
@@ -220,7 +220,7 @@ export function sortieCommand(state: DemoState, command: SortieCommand) {
   if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "complete"].includes(command)) throw new Error("Unsupported sortie command");
   if (!["reset_weather"].includes(command) && (!state.order || state.order.status !== "dispatched")) throw new Error("Delivery controls unlock after the order is dispatched");
   if (command === "inject_weather") { state.sortie.weather = "unsafe"; state.sortie.status = "lockout"; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: false, detail: "Unsafe weather injected · flight locked out", severity: "danger" } : gate); state.sortie.fallbackReason = "Unsafe weather automatically created a ground-courier leg"; setCourierFallback(state); return; }
-  if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.telemetry = []; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below demo threshold", severity: undefined } : gate); if (state.shipment) { state.shipment.status = "in_transit"; state.shipment.legs = state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "in_transit" })); } return; }
+  if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.telemetry = []; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below the configured threshold", severity: undefined } : gate); if (state.shipment) { state.shipment.status = "in_transit"; state.shipment.legs = state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "in_transit" })); } return; }
   if (command === "fallback") { state.sortie.status = "courier_fallback"; state.sortie.fallbackReason = "Manual override requested a ground-courier handover"; setCourierFallback(state); return; }
   if (command === "complete") { if (state.sortie.status !== "en_route") throw new Error("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
   if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw new Error("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }

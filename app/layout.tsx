@@ -3,11 +3,14 @@ import "./globals.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 export const metadata: Metadata = {
-  title: "Korama — Trade corridor prototype",
-  description: "A private investor prototype for Korama's West African trade corridor.",
+  title: "Korama — Commerce across West Africa",
+  description:
+    "Shop and operate traceable commerce across the Ghana–Nigeria corridor.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>{children}</body>

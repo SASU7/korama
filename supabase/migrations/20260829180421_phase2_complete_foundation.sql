@@ -268,7 +268,7 @@ create table public.certificate_previews (
   origin_assessment_id uuid not null references public.origin_assessments(id) on delete cascade,
   operating_company_id uuid not null references public.operating_companies(id),
   storage_path text,
-  watermark text not null default 'DEMO — NOT A VALID CERTIFICATE',
+  watermark text not null default 'PREVIEW — NOT A VALID CERTIFICATE',
   created_at timestamptz not null default now()
 );
 

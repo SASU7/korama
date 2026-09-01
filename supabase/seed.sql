@@ -1,5 +1,5 @@
 insert into public.tenants (id, reference, name) values
-  ('11000000-0000-0000-0000-000000000001', 'KORAMA-DEMO-TENANT', 'Korama investor prototype tenant')
+  ('11000000-0000-0000-0000-000000000001', 'KORAMA-POC-TENANT', 'Korama proof-of-concept tenant')
 on conflict (id) do nothing;
 
 insert into public.operating_companies (id, reference, legal_name, country_code) values
@@ -18,7 +18,7 @@ insert into public.markets (id, code, name, currency, language, status, launch_p
 on conflict (id) do nothing;
 
 insert into public.products (id, reference, name, category, producer, inventory_class, description, weight_grams) values
-  ('30000000-0000-0000-0000-000000000001', 'NK-SHEA-BALM', 'Nokware shea repair balm', 'Beauty', 'Nokware Skincare · Ghana', 'ghana_origin_export', 'Ghana-origin shea balm for the deep demo order.', 180),
+  ('30000000-0000-0000-0000-000000000001', 'NK-SHEA-BALM', 'Nokware shea repair balm', 'Beauty', 'Nokware Skincare · Ghana', 'ghana_origin_export', 'Ghana-origin shea balm available in Nigeria.', 180),
   ('30000000-0000-0000-0000-000000000002', 'DI-NG-BLENDER', 'Compact kitchen blender', 'Home & craft', 'Global supplier · cleared in Nigeria', 'direct_import', 'Direct-import comparison product.', 1900),
   ('30000000-0000-0000-0000-000000000003', 'FM-ROADMAP-LISTING', 'Future maker marketplace listing', 'Home & craft', 'Third-party seller · roadmap', 'marketplace_future', 'Roadmap-only marketplace listing.', 100)
 on conflict (id) do nothing;
@@ -170,11 +170,11 @@ insert into public.drones (id, reference, operating_company_id, payload_limit_gr
 on conflict (id) do nothing;
 
 insert into public.authorizations (id, operating_company_id, reference, jurisdiction, valid_from, valid_until, status) values
-  ('71000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'KOR-NG-DEMO-AUTH-01', 'Nigeria · Lagos corridor', '2026-08-29T00:00:00Z', '2026-09-30T23:59:59Z', 'approved')
+  ('71000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'KOR-NG-POC-AUTH-01', 'Nigeria · Lagos corridor', '2026-08-29T00:00:00Z', '2027-09-30T23:59:59Z', 'approved')
 on conflict (id) do nothing;
 
 insert into public.geofences (id, operating_company_id, reference, geometry, status) values
-  ('72000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'KOR-LEKKI-DEMO-CORRIDOR', '{"type":"LineString","coordinates":[[3.49,6.43],[3.57,6.48],[3.64,6.54]]}'::jsonb, 'active')
+  ('72000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'KOR-LEKKI-POC-CORRIDOR', '{"type":"LineString","coordinates":[[3.49,6.43],[3.57,6.48],[3.64,6.54]]}'::jsonb, 'active')
 on conflict (id) do nothing;
 
 insert into public.origin_records (id, batch_id, operating_company_id, status) values
@@ -200,5 +200,5 @@ insert into public.duty_quotes (id, origin_assessment_id, operating_company_id, 
 on conflict (id) do nothing;
 
 insert into public.certificate_previews (id, origin_assessment_id, operating_company_id, watermark) values
-  ('49000000-0000-0000-0000-000000000001', '47000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'DEMO — NOT A VALID CERTIFICATE')
+  ('49000000-0000-0000-0000-000000000001', '47000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'PREVIEW — NOT A VALID CERTIFICATE')
 on conflict (id) do nothing;

@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+import { ensureConsumerProfile } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const requestedNext = url.searchParams.get("next") ?? "";
+  const next =
+    requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/shop";
+  if (!code)
+    return NextResponse.redirect(
+      new URL("/auth/sign-in?error=missing_code", url.origin),
+    );
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error)
+    return NextResponse.redirect(
+      new URL("/auth/sign-in?error=exchange_failed", url.origin),
+    );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.redirect(
+      new URL("/auth/sign-in?error=missing_user", url.origin),
+    );
+  await ensureConsumerProfile(user);
+  return NextResponse.redirect(new URL(next, url.origin));
+}

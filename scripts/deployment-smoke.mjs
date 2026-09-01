@@ -11,12 +11,13 @@ async function get(path) {
 }
 
 const health = await get("/api/health");
-if (health.response.status !== 200 || health.body.status !== "ok") throw new Error(`/api/health is not ready (HTTP ${health.response.status})`);
+if (health.response.status !== 200 || health.body.status !== "ok") throw new Error(`/api/health is not ready (HTTP ${health.response.status}): ${JSON.stringify(health.body.checks ?? {})}`);
 const serializedHealth = JSON.stringify(health.body);
-for (const secretName of ["SUPABASE_SERVICE_ROLE_KEY", "PAYSTACK_SECRET_KEY", "PAYSTACK_WEBHOOK_SECRET", "KORAMA_DEMO_SESSION_SECRET", "KORAMA_SEED_PASSWORD"]) {
+for (const secretName of ["SUPABASE_SERVICE_ROLE_KEY", "PAYSTACK_SECRET_KEY"]) {
   if (serializedHealth.includes(secretName)) throw new Error(`/api/health exposed a server-only name: ${secretName}`);
 }
 
-const state = await get("/api/demo/state");
-if (state.response.status !== 401) throw new Error(`/api/demo/state must remain access-controlled (HTTP ${state.response.status})`);
-console.log(`deployment smoke pass: ${baseUrl} health ready and demo gate enforced`);
+const state = await get("/api/app/state");
+if (state.response.status !== 200 || !Array.isArray(state.body.state?.products)) throw new Error(`/api/app/state did not return the public catalogue (HTTP ${state.response.status})`);
+if (state.body.auth?.authenticated !== false) throw new Error("Anonymous application state must not report an authenticated user");
+console.log(`deployment smoke pass: ${baseUrl} health ready and public catalogue available`);

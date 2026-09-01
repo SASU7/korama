@@ -18,10 +18,6 @@ type NormalizedContext = {
 };
 
 function runtimeEnv(name: string) { return globalThis.process?.env?.[name]; }
-function truthy(value: string | undefined) { return ["1", "true", "yes"].includes((value ?? "").toLowerCase()); }
-
-export function normalizedRepositoryEnabled() { return truthy(runtimeEnv("KORAMA_USE_NORMALIZED_REPOSITORY")); }
-
 function adminClient() {
   const url = runtimeEnv("NEXT_PUBLIC_SUPABASE_URL");
   const key = runtimeEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -64,7 +60,7 @@ function complianceForProduct(productIdValue: string, context: { batches: Row<"i
     evidence: stringList(assessment.evidence),
     transformation: assessment.transformation_summary,
     dutyQuote: duty?.quote ?? assessment.duty_quote,
-    certificateWatermark: certificate?.watermark ?? "DEMO — NOT A VALID CERTIFICATE",
+    certificateWatermark: certificate?.watermark ?? "PREVIEW — NOT A VALID CERTIFICATE",
   } satisfies ComplianceSnapshot;
 }
 
@@ -127,7 +123,7 @@ function baseCompliance(context: NormalizedContext): ComplianceSnapshot {
     evidence: [],
     transformation: "Transformation evidence is awaiting normalized assessment data.",
     dutyQuote: "Illustrative: duty treatment awaiting pilot validation",
-    certificateWatermark: "DEMO — NOT A VALID CERTIFICATE",
+    certificateWatermark: "PREVIEW — NOT A VALID CERTIFICATE",
   };
 }
 
@@ -181,7 +177,7 @@ function toSortie(view: NormalizedOrderView, context: NormalizedContext): Sortie
     { key: "payload", label: "Payload", detail: `${weight}g / ${drone?.payload_limit_grams ?? 2000}g simulated limit`, passed: weight <= (drone?.payload_limit_grams ?? 2000) },
     { key: "aircraft", label: "Aircraft condition", detail: `${drone?.reference ?? "KOR-D01"} · airworthiness current`, passed: drone?.airworthiness_current ?? true },
     { key: "authorization", label: "Authorization window", detail: "Simulated Nigerian authorization on file", passed: Boolean(authorization) },
-    { key: "weather", label: "Weather", detail: weather === "clear" ? "Wind and rain below demo threshold" : "Unsafe weather injected · flight locked out", passed: weather === "clear", ...(weather === "unsafe" ? { severity: "danger" as const } : {}) },
+    { key: "weather", label: "Weather", detail: weather === "clear" ? "Wind and rain below the configured threshold" : "Unsafe weather injected · flight locked out", passed: weather === "clear", ...(weather === "unsafe" ? { severity: "danger" as const } : {}) },
     { key: "geofence", label: "Geofence", detail: "Route avoids restricted corridors", passed: Boolean(geofence) },
     { key: "battery", label: "Battery", detail: `${drone?.battery_percent ?? 94}% · reserve protected`, passed: (drone?.battery_percent ?? 94) >= 20 },
     { key: "override", label: "Manual override", detail: "Safety officer control available", passed: true },
@@ -257,12 +253,14 @@ function emptyOrderView(): NormalizedOrderView { return { order: {} as Row<"orde
 
 export async function readNormalizedState(profileId?: string, role?: UserRole) {
   const context = await loadContext();
-  const scopedProfile = role === "consumer" ? profileId : undefined;
-  const view = await context.repository.getLatestOrderView(NIGERIA_OPERATING_COMPANY_ID, scopedProfile);
+  const view = role === "consumer" && !profileId
+    ? null
+    : await context.repository.getLatestOrderView(NIGERIA_OPERATING_COMPANY_ID, role === "consumer" ? profileId : undefined);
   return toState(context, view, role);
 }
 
 export async function readNormalizedOrder(reference: string, profileId?: string, role?: UserRole) {
+  if (role === "consumer" && !profileId) return null;
   const context = await loadContext();
   const view = await context.repository.getOrderView(reference, role === "consumer" ? profileId : undefined, NIGERIA_OPERATING_COMPANY_ID);
   return view ? { view, state: toState(context, view, role) } : null;
@@ -316,4 +314,3 @@ export async function normalizedCommand(reference: string, command: string) {
   if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
 }
-export async function normalizedReset() { return (await loadContext()).repository.resetDemo(NIGERIA_OPERATING_COMPANY_ID); }

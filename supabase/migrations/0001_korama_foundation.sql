@@ -160,7 +160,7 @@ create table public.origin_assessments (
   transformation_summary text not null,
   evidence jsonb not null default '[]'::jsonb,
   duty_quote text not null,
-  certificate_watermark text not null default 'DEMO — NOT A VALID CERTIFICATE',
+  certificate_watermark text not null default 'PREVIEW — NOT A VALID CERTIFICATE',
   created_at timestamptz not null default now()
 );
 

@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -354,27 +334,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      demo_state_snapshots: {
-        Row: {
-          id: string
-          payload: Json
-          revision: number
-          updated_at: string
-        }
-        Insert: {
-          id: string
-          payload: Json
-          revision?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          payload?: Json
-          revision?: number
-          updated_at?: string
-        }
-        Relationships: []
       }
       drones: {
         Row: {
@@ -2171,10 +2130,6 @@ export type Database = {
         }
         Returns: Json
       }
-      korama_reset_demo: {
-        Args: { p_operating_company_id: string }
-        Returns: Json
-      }
       korama_verify_payment: {
         Args: {
           p_amount_minor: number
@@ -2358,9 +2313,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       inventory_class: [
@@ -2418,4 +2370,3 @@ export const Constants = {
     },
   },
 } as const
-

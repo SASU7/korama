@@ -230,8 +230,5 @@ export function createNormalizedRepository(client: Client) {
       return checkedRpc("normalized sortie transition", client.rpc("korama_command_sortie", { p_order_reference: orderReference, p_command: command }));
     },
 
-    async resetDemo(operatingCompanyId: string): Promise<NormalizedMutationResult> {
-      return checkedRpc("normalized demo reset", client.rpc("korama_reset_demo", { p_operating_company_id: operatingCompanyId }));
-    },
   };
 }

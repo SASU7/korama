@@ -1,5 +1,5 @@
 {
-  "name": "korama-investor-prototype",
+  "name": "korama",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,14 +13,9 @@
     "test": "node --test tests/*.test.ts",
     "smoke": "node scripts/smoke.mjs",
     "migration:check": "node scripts/migration-sanity.mjs",
-    "api:acceptance": "node scripts/api-acceptance.mjs",
-    "api:normalized:acceptance": "KORAMA_NORMALIZED_ACCEPTANCE=true node scripts/api-acceptance.mjs",
-    "db:test": "supabase test db --local",
     "normalized:check": "node scripts/normalized-contract-check.mjs",
-    "normalized:mutation:check": "node scripts/normalized-mutation-check.mjs",
-    "auth:bootstrap": "node scripts/bootstrap-identities.mjs",
     "env:check": "node scripts/check-env.mjs",
-    "staging:check": "node scripts/staging-preflight.mjs",
+    "production:check": "node scripts/staging-preflight.mjs",
     "deployment:check": "node scripts/deployment-smoke.mjs",
     "bundle:check": "node scripts/client-bundle-check.mjs"
   },
