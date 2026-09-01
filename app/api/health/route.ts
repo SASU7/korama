@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/auth";
+import { paystackConfigured } from "@/lib/paystack";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
       process.env.SUPABASE_SERVICE_ROLE_KEY,
     ),
-    paystack: Boolean(process.env.PAYSTACK_SECRET_KEY?.startsWith("sk_test_")),
+    paystack: paystackConfigured(),
     mapbox: Boolean(process.env.NEXT_PUBLIC_MAPBOX_TOKEN),
   };
   let database = false;
