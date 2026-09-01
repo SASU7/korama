@@ -1,34 +1,60 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-export default function GoogleSignInButton({ next = "/shop" }: { next?: string }) {
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 18 18" className="size-4" aria-hidden focusable="false">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" />
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" />
+    </svg>
+  );
+}
+
+export default function GoogleSignInButton({ next }: { next: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function signIn() {
     setBusy(true);
     setError("");
-    const callback = new URL("/auth/callback", window.location.origin);
-    callback.searchParams.set(
-      "next",
-      next.startsWith("/") && !next.startsWith("//") ? next : "/shop",
-    );
-    const { error: authError } = await createSupabaseBrowserClient().auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: callback.toString() },
-    });
-    if (authError) {
-      setError(authError.message);
+    try {
+      const redirectTo = new URL("/auth/callback", window.location.origin);
+      redirectTo.searchParams.set("next", next);
+      const { error: caught } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: redirectTo.toString() },
+      });
+      if (caught) throw caught;
+    } catch {
+      setError("Google sign-in could not be started. Please try again.");
       setBusy(false);
     }
   }
 
-  return <>
-    <button type="button" className="google-button" onClick={signIn} disabled={busy}>
-      <span className="google-g" aria-hidden="true">G</span>{busy ? "Opening Google…" : "Continue with Google"}
-    </button>
-    {error && <p className="auth-error" role="alert">{error}</p>}
-  </>;
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        onClick={signIn}
+        disabled={busy}
+        aria-busy={busy}
+      >
+        <GoogleMark />
+        {busy ? "Opening Google…" : "Continue with Google"}
+      </Button>
+      {error && (
+        <p role="alert" className="text-destructive text-(length:--text-meta)">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }

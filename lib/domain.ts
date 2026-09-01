@@ -1,6 +1,19 @@
 export type MarketCode = "GH" | "NG";
 export type InventoryClass = "direct_import" | "ghana_origin_export" | "marketplace_future";
 export type UserRole = "consumer" | "warehouse_operator" | "safety_officer";
+export type MarketStatus = "active" | "roadmap" | "future";
+
+/** A configured market, as the markets screen renders it. */
+export type Market = {
+  code: string;
+  name: string;
+  currency: string;
+  language: string;
+  status: MarketStatus;
+  launchPhase: number;
+  localizationRequired: string | null;
+  checkoutEnabled: boolean;
+};
 export type OrderStatus = "pending_payment" | "paid" | "allocated" | "picked" | "packed" | "dispatched" | "delivered";
 export type SortieStatus = "draft" | "preflight" | "cleared" | "launched" | "en_route" | "delivered" | "lockout" | "courier_fallback";
 

@@ -96,7 +96,10 @@ insert into public.market_prices (id, product_id, market_id, operating_company_i
 on conflict (id) do nothing;
 
 insert into public.market_configs (market_id, operating_company_id, checkout_enabled, language, tax_duty_status) values
-  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', true, 'en', 'Illustrative pilot validation required'),
+  -- Ghana is catalogue-only in the prototype: validateDeliveryAddress and
+  -- korama_create_order both reject any non-NG delivery address, so a true
+  -- flag here contradicts every code path and the product spec.
+  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', false, 'en', 'Catalogue only; Nigerian delivery addresses only'),
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', true, 'en', 'Illustrative pilot validation required'),
   ('20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', false, 'fr', 'Roadmap; French localization required'),
   ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001', false, 'fr', 'Roadmap; French localization required')

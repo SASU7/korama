@@ -8,6 +8,7 @@ import { fontVariables } from "@/app/fonts";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { OfflineBanner } from "@/components/shared/offline-banner";
 
 export const metadata: Metadata = {
   title: "Korama — Commerce across West Africa",
@@ -39,6 +40,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <OfflineBanner />
           <TooltipProvider>{children}</TooltipProvider>
           {/* richColors would introduce sonner's own red/green/amber and break
               the single-accent rule; success/error map to our own tokens. */}

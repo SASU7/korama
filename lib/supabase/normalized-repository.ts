@@ -99,8 +99,30 @@ function unique(values: string[]) {
   return [...new Set(values)];
 }
 
+export type NormalizedMarket = {
+  market: Row<"markets">;
+  configs: Row<"market_configs">[];
+};
+
 export function createNormalizedRepository(client: Client) {
   return {
+    /**
+     * Every configured market, active and roadmap alike. The markets screen
+     * previously rendered a hardcoded array in the client component, which
+     * had drifted: it merged Togo and Benin into one fabricated "TG / BJ" row
+     * that does not exist in the database.
+     */
+    async listMarkets(): Promise<NormalizedMarket[]> {
+      const [markets, configs] = await Promise.all([
+        checkedMany("markets read", client.from("markets").select("*").order("launch_phase").order("code")),
+        checkedMany("market configs read", client.from("market_configs").select("*")),
+      ]);
+      return markets.map((market) => ({
+        market,
+        configs: configs.filter((config) => config.market_id === market.id),
+      }));
+    },
+
     async listCatalogue(marketCode: string): Promise<NormalizedCatalogueItem[]> {
       const market = await checked("market lookup", client.from("markets").select("*").eq("code", marketCode).maybeSingle());
       if (!market) throw new Error("Market " + marketCode + " was not found");

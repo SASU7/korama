@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { buildTelemetry, type ComplianceSnapshot, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
-import type { Database } from "@/lib/supabase/database.types";
+import { adminClient } from "@/lib/supabase/admin-client";
 
 export const NIGERIA_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000002";
 export const NIGERIA_MARKET_ID = "20000000-0000-0000-0000-000000000002";
@@ -18,12 +18,6 @@ type NormalizedContext = {
 };
 
 function runtimeEnv(name: string) { return globalThis.process?.env?.[name]; }
-function adminClient() {
-  const url = runtimeEnv("NEXT_PUBLIC_SUPABASE_URL");
-  const key = runtimeEnv("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !key) throw new Error("Normalized Supabase mode requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
-  return createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
 
 function object(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};

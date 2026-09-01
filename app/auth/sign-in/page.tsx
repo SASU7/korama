@@ -1,8 +1,23 @@
-import Link from "next/link";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
+import { Wordmark } from "@/components/shared/brand";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { authContext } from "@/lib/auth";
+
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "Sign in — Korama" };
+
+const RETURNING_TO: Record<string, string> = {
+  "/operations": "Operations",
+  "/compliance": "Compliance",
+  "/delivery": "Delivery",
+  "/cart": "your cart",
+  "/checkout": "checkout",
+  "/account/orders": "your orders",
+};
 
 export default async function SignInPage({
   searchParams,
@@ -15,29 +30,39 @@ export default async function SignInPage({
       ? params.next
       : "/shop";
   if (await authContext()) redirect(next);
+
+  const destination = RETURNING_TO[next];
+
   return (
-    <main className="auth-page">
-      <Link href="/shop" className="auth-brand">
-        <span className="brand-mark">K</span>
-        <span>KORAMA</span>
-      </Link>
-      <section className="auth-card">
-        <p className="eyebrow">Your Korama account</p>
-        <h1>Welcome back.</h1>
-        <p>
-          Sign in to complete checkout, follow your orders, or access an
-          assigned operations role.
-        </p>
-        <GoogleSignInButton next={next} />
-        {params.error && (
-          <p className="auth-error" role="alert">
-            Sign-in could not be completed. Please try again.
+    <main className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6">
+      <Wordmark />
+      <Card className="w-full max-w-[400px]">
+        <CardHeader>
+          <CardTitle>Sign in</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-muted-foreground text-(length:--text-meta)">
+            Use your Google account to check out, track orders, and open any
+            operations role assigned to you.
           </p>
-        )}
-        <p className="auth-note">
-          Payments run in test mode. No live charges are made.
-        </p>
-      </section>
+          <GoogleSignInButton next={next} />
+          {destination && (
+            <p className="text-muted-foreground text-(length:--text-meta)">
+              You&rsquo;ll return to {destination} after signing in.
+            </p>
+          )}
+          {params.error && (
+            <Alert variant="destructive" role="alert">
+              <AlertDescription>
+                Sign-in could not be completed. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
+          <p className="text-muted-foreground border-t pt-4 text-(length:--text-meta)">
+            Paystack runs in test mode. No live charges are made.
+          </p>
+        </CardContent>
+      </Card>
     </main>
   );
 }

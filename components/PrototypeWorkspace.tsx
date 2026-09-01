@@ -2,9 +2,14 @@
 
 import "mapbox-gl/dist/mapbox-gl.css";
 
+import { useRouter } from "next/navigation";
+
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Check,
@@ -47,25 +52,6 @@ type Quote = {
   deliveryMinor: number;
   totalMinor: number;
   currency: "NGN";
-};
-const roleLabels: Record<UserRole, string> = {
-  consumer: "Customer",
-  warehouse_operator: "Warehouse operator",
-  safety_officer: "Safety officer",
-};
-const surfaceLabels: Record<Surface, string> = {
-  shop: "Shop",
-  operations: "Operations",
-  compliance: "Compliance",
-  delivery: "Delivery",
-  markets: "Markets",
-};
-const surfacePaths: Record<Surface, string> = {
-  shop: "/shop",
-  operations: "/operations",
-  compliance: "/compliance",
-  delivery: "/delivery",
-  markets: "/markets",
 };
 const originLabels: Record<Product["origin"], string> = {
   direct_import: "Direct import",
@@ -208,7 +194,6 @@ export default function PrototypeWorkspace({
   const router = useRouter();
   const [state, setState] = useState<DemoState>(initialState);
   const surface = initialSurface;
-  const [role, setRole] = useState<UserRole>(initialRole);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [selectedProductId, setSelectedProductId] = useState("shea-balm");
@@ -232,44 +217,7 @@ export default function PrototypeWorkspace({
   const roleButtonRef = useRef<HTMLButtonElement>(null);
   const roleMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!roleOpen) return;
-    roleMenuRef.current
-      ?.querySelector<HTMLButtonElement>("[role=menuitem]")
-      ?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setRoleOpen(false);
-        roleButtonRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [roleOpen]);
 
-  function handleRoleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    const items = Array.from(
-      roleMenuRef.current?.querySelectorAll<HTMLButtonElement>(
-        "[role=menuitem]",
-      ) ?? [],
-    );
-    const current = items.indexOf(document.activeElement as HTMLButtonElement);
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      items[
-        (current + (event.key === "ArrowDown" ? 1 : items.length - 1)) %
-          items.length
-      ]?.focus();
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      items[0]?.focus();
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      items.at(-1)?.focus();
-    }
-  }
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/app/state", { cache: "no-store" });
@@ -519,48 +467,7 @@ export default function PrototypeWorkspace({
       );
     }
   }
-  async function switchRole(nextRole: UserRole) {
-    setError("");
-    if (!navigator.onLine) {
-      setError("You are offline. Reconnect before switching identities.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const response = await fetch("/api/auth/role", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ role: nextRole }),
-      });
-      if (!response.ok) {
-        const body = await readApiBody(response);
-        throw new Error(body.error ?? "Identity switch failed");
-      }
-      setRole(nextRole);
-      setRoleOpen(false);
-      roleButtonRef.current?.focus();
-      router.push(
-        nextRole === "warehouse_operator"
-          ? "/operations"
-          : nextRole === "safety_officer"
-            ? "/delivery"
-            : "/shop",
-      );
-      router.refresh();
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Identity switch failed",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function signOut() {
-    await fetch("/api/auth/sign-out", { method: "POST" });
-    router.push("/shop");
-    router.refresh();
-  }
 
   const selectedProduct = getProduct(state, selectedProductId);
   const changeMarket = (next: "NG" | "GH") => {
@@ -593,252 +500,58 @@ export default function PrototypeWorkspace({
     : serverQuote;
 
   return (
-    <main className="workspace-frame">
-      <header className="workspace-bar">
-        <Link href="/shop" className="brand-lockup">
-          <span className="brand-mark">K</span>
-          <span>KORAMA</span>
-        </Link>
-        <div className="workspace-context">
-          <span className="context-dot" /> Ghana + Nigeria{" "}
-          <span className="sync-status">
-            {syncStatus === "realtime"
-              ? "Live"
-              : syncStatus === "polling"
-                ? "Synced"
-                : "Connected"}
-          </span>
+    <div
+      className="flex flex-col gap-(--gutter)"
+      aria-busy={stateLoading || busy}
+    >
+      {error && (
+        <Alert variant="destructive" role="alert">
+          <CircleAlert />
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={retryState}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {stateLoading ? (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-64 w-full" />
         </div>
-        <div className="workspace-actions">
-          {!authenticated ? (
-            <Link className="header-sign-in" href="/auth/sign-in?next=/shop">
-              Sign in
-            </Link>
-          ) : (
-            <div className="role-switch">
-              <button
-                ref={roleButtonRef}
-                type="button"
-                className="role-button"
-                onClick={() => setRoleOpen((open) => !open)}
-                disabled={busy}
-                aria-busy={busy}
-                aria-expanded={roleOpen}
-                aria-haspopup="menu"
-                aria-controls="role-menu"
-              >
-                <span className="avatar">
-                  {role === "consumer"
-                    ? "CU"
-                    : role === "warehouse_operator"
-                      ? "OP"
-                      : "SO"}
-                </span>
-                <span className="role-copy">
-                  <strong>{displayName || roleLabels[role]}</strong>
-                  <small>{roleLabels[role]}</small>
-                </span>
-                <ChevronDown size={16} aria-hidden="true" />
-              </button>
-              {roleOpen && (
-                <div
-                  ref={roleMenuRef}
-                  id="role-menu"
-                  className="role-menu workspace-role-menu"
-                  role="menu"
-                  aria-label="Account and assigned roles"
-                  onKeyDown={handleRoleMenuKeyDown}
-                >
-                  <p>Switch between roles assigned to your account.</p>
-                  {assignedRoles.map((key) => (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      key={key}
-                      disabled={busy}
-                      onClick={() => switchRole(key)}
-                    >
-                      {roleLabels[key]} {role === key && "✓"}
-                    </button>
-                  ))}
-                  <Link role="menuitem" href="/account/orders">
-                    My orders
-                  </Link>
-                  <button type="button" role="menuitem" onClick={signOut}>
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
+      ) : (
+        <>
+          {surface === "shop" && (
+            <ShopSurface
+              state={state}
+              market={market}
+              setMarket={changeMarket}
+              products={filteredProducts}
+              categories={categories}
+              category={category}
+              setCategory={setCategory}
+              search={search}
+              setSearch={setSearch}
+              selectedProduct={selectedProduct}
+              selectProduct={setSelectedProductId}
+              quantity={quantity}
+              setQuantity={setQuantity}
+              address={address}
+              setAddress={setAddress}
+              addressAttempted={addressAttempted}
+              pay={pay}
+              busy={busy}
+              isDeepOrder={isDeepOrder}
+              serverQuote={currentQuote}
+              quoteLoading={quoteLoading}
+              quoteError={quoteError}
+              authenticated={authenticated}
+            />
           )}
-        </div>
-      </header>
-      <div className="workspace-layout">
-        <aside
-          className="workspace-sidebar"
-          aria-label="Application navigation"
-        >
-          <div className="sidebar-label">Workspace</div>
-          {(Object.keys(surfaceLabels) as Surface[])
-            .filter(
-              (key) =>
-                key === "shop" ||
-                key === "markets" ||
-                (key === "delivery"
-                  ? assignedRoles.includes("safety_officer")
-                  : assignedRoles.includes("warehouse_operator")),
-            )
-            .map((key) => (
-              <Link
-                key={key}
-                href={surfacePaths[key]}
-                className={
-                  surface === key ? "surface-nav active" : "surface-nav"
-                }
-                aria-current={surface === key ? "page" : undefined}
-              >
-                <span className="surface-icon">
-                  {key === "shop" ? (
-                    <ShoppingBag size={16} aria-hidden="true" />
-                  ) : key === "operations" ? (
-                    <Warehouse size={16} aria-hidden="true" />
-                  ) : key === "compliance" ? (
-                    <FileCheck2 size={16} aria-hidden="true" />
-                  ) : key === "delivery" ? (
-                    <Plane size={16} aria-hidden="true" />
-                  ) : (
-                    <Map size={16} aria-hidden="true" />
-                  )}
-                </span>
-                <span>{surfaceLabels[key]}</span>
-                {key === "shop" && (
-                  <span className="nav-count">{state.cart.length || ""}</span>
-                )}
-              </Link>
-            ))}
-          <div className="sidebar-divider" />
-          <div className="sidebar-callout">
-            <Sparkles size={16} aria-hidden="true" />
-            <strong>Across the corridor</strong>
-            <p>Trace Ghana-origin goods from producer to Nigerian doorstep.</p>
-            <Link href="/shop">
-              Browse products <ArrowRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        </aside>
-        <section className="workspace-main" aria-busy={stateLoading || busy}>
-          {notice && (
-            <div className="notice success" role="status">
-              <Check size={16} aria-hidden="true" />
-              {notice}
-              <button
-                type="button"
-                onClick={() => setNotice("")}
-                aria-label="Dismiss notice"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {error && (
-            <div className="notice error" role="alert">
-              <CircleAlert size={16} aria-hidden="true" />
-              <span>{error}</span>
-              <button
-                type="button"
-                className="notice-action"
-                onClick={retryState}
-              >
-                Retry
-              </button>
-              <button
-                type="button"
-                onClick={() => setError("")}
-                aria-label="Dismiss error"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {!online && (
-            <div className="notice offline" role="status">
-              <CircleAlert size={16} aria-hidden="true" />
-              <span>
-                You’re offline. Changes are paused until the connection returns.
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  void refresh().catch(() =>
-                    setError(
-                      "The application data could not be refreshed yet.",
-                    ),
-                  )
-                }
-              >
-                Retry
-              </button>
-            </div>
-          )}
-          {stateLoading ? (
-            <div className="workspace-loading">
-              <LoadingBlock />
-              <strong>Loading Korama</strong>
-              <p>Connecting to the Ghana–Nigeria workspace.</p>
-            </div>
-          ) : (
-            <>
-              {surface === "shop" && (
-                <ShopSurface
-                  state={state}
-                  market={market}
-                  setMarket={changeMarket}
-                  products={filteredProducts}
-                  categories={categories}
-                  category={category}
-                  setCategory={setCategory}
-                  search={search}
-                  setSearch={setSearch}
-                  selectedProduct={selectedProduct}
-                  selectProduct={setSelectedProductId}
-                  quantity={quantity}
-                  setQuantity={setQuantity}
-                  address={address}
-                  setAddress={setAddress}
-                  addressAttempted={addressAttempted}
-                  pay={pay}
-                  busy={busy}
-                  isDeepOrder={isDeepOrder}
-                  serverQuote={currentQuote}
-                  quoteLoading={quoteLoading}
-                  quoteError={quoteError}
-                  authenticated={authenticated}
-                />
-              )}
-              {surface === "operations" && (
-                <OperationsSurface state={state} mutate={mutate} busy={busy} />
-              )}
-              {surface === "compliance" && <ComplianceSurface state={state} />}
-              {surface === "delivery" && (
-                <>
-                  <DeliverySurface state={state} mutate={mutate} busy={busy} />
-                  <DeliveryCompletionButton
-                    state={state}
-                    mutate={mutate}
-                    busy={busy}
-                  />
-                </>
-              )}
-              {surface === "markets" && (
-                <>
-                  <MarketsSurface />
-                </>
-              )}
-            </>
-          )}
-        </section>
-      </div>
-    </main>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1284,7 +997,7 @@ function OrderCard({ state, quote }: { state: DemoState; quote: Quote }) {
   );
 }
 
-function OperationsSurface({
+export function OperationsSurface({
   state,
   mutate,
   busy,
@@ -1483,7 +1196,7 @@ function OperationsSurface({
   );
 }
 
-function ComplianceSurface({ state }: { state: DemoState }) {
+export function ComplianceSurface({ state }: { state: DemoState }) {
   return (
     <>
       <SectionTitle
@@ -1557,7 +1270,7 @@ function ComplianceSurface({ state }: { state: DemoState }) {
   );
 }
 
-function DeliverySurface({
+export function DeliverySurface({
   state,
   mutate,
   busy,
@@ -1905,7 +1618,7 @@ function StaticRoutePreview({ fallback = false }: { fallback?: boolean }) {
   );
 }
 
-function DeliveryCompletionButton({
+export function DeliveryCompletionButton({
   state,
   mutate,
   busy,
@@ -1947,7 +1660,7 @@ function DeliveryCompletionButton({
   );
 }
 
-function MarketsSurface() {
+export function MarketsSurface() {
   return (
     <>
       <SectionTitle
