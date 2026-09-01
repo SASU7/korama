@@ -1,4 +1,8 @@
 export type MarketCode = "GH" | "NG";
+// Relative, with the extension: tests/domain.test.ts runs this module under
+// node --test, which does not resolve the "@/" alias.
+import { badRequest, conflict } from "./errors.ts";
+
 export type InventoryClass = "direct_import" | "ghana_origin_export" | "marketplace_future";
 export type UserRole =
   | "consumer"
@@ -266,15 +270,15 @@ export function validateDeliveryAddress(value: unknown): DeliveryAddress {
   const addressLine = String(input.addressLine ?? "").trim();
   const city = String(input.city ?? "").trim();
   const countryCode = String(input.countryCode ?? "NG").trim().toUpperCase();
-  if (recipientName.length < 2) throw new Error("Enter the recipient name");
-  if (addressLine.length < 5) throw new Error("Enter a delivery address");
-  if (city.length < 2) throw new Error("Enter the delivery city");
-  if (countryCode !== "NG") throw new Error("Checkout is currently available only for Nigerian delivery addresses");
+  if (recipientName.length < 2) throw badRequest("Enter the recipient name");
+  if (addressLine.length < 5) throw badRequest("Enter a delivery address");
+  if (city.length < 2) throw badRequest("Enter the delivery city");
+  if (countryCode !== "NG") throw badRequest("Checkout is currently available only for Nigerian delivery addresses");
   return { recipientName, addressLine, city, countryCode: "NG" };
 }
 export function normalizeQuantity(value: unknown): number {
   const quantity = Number(value ?? 1);
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) throw new Error("Quantity must be a whole number between 1 and 10");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) throw badRequest("Quantity must be a whole number between 1 and 10");
   return quantity;
 }
 export function formatMoney(value: number, currency: string) { return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-GH", { style: "currency", currency, maximumFractionDigits: 0 }).format(value / 100); }
@@ -284,23 +288,23 @@ export function formatMoney(value: number, currency: string) { return new Intl.N
  * is a caller bug, and folding would surprise the user about the unit cap.
  */
 export function normalizeCart(value: unknown): CartLine[] {
-  if (!Array.isArray(value)) throw new Error("Cart lines must be an array");
-  if (value.length < 1) throw new Error("Add something to the cart first");
+  if (!Array.isArray(value)) throw badRequest("Cart lines must be an array");
+  if (value.length < 1) throw badRequest("Add something to the cart first");
   if (value.length > MAX_CART_LINES)
-    throw new Error(`A cart may contain at most ${MAX_CART_LINES} lines`);
+    throw badRequest(`A cart may contain at most ${MAX_CART_LINES} lines`);
 
   const lines = value.map((entry, index) => {
     const line = (entry ?? {}) as Record<string, unknown>;
     const productId = String(line.productId ?? "").trim();
-    if (!productId) throw new Error(`Line ${index + 1}: a product is required`);
+    if (!productId) throw badRequest(`Line ${index + 1}: a product is required`);
     return { productId, quantity: normalizeQuantity(line.quantity) };
   });
 
   if (new Set(lines.map((line) => line.productId)).size !== lines.length)
-    throw new Error("A cart cannot list the same product twice");
+    throw badRequest("A cart cannot list the same product twice");
   const total = lines.reduce((sum, line) => sum + line.quantity, 0);
   if (total > MAX_CART_QUANTITY)
-    throw new Error(`A cart may contain at most ${MAX_CART_QUANTITY} units in total`);
+    throw badRequest(`A cart may contain at most ${MAX_CART_QUANTITY} units in total`);
   return lines;
 }
 
@@ -397,9 +401,9 @@ export function selectFefoBatch(state: DemoState, productId: string, quantity = 
 }
 function stamp() { return new Date().toISOString(); }
 export function markOrder(state: DemoState, status: OrderStatus) {
-  if (!state.order) throw new Error("Create the order before advancing it");
+  if (!state.order) throw conflict("Create the order before advancing it");
   const allowed: Record<OrderStatus, OrderStatus | null> = { pending_payment: "paid", paid: "allocated", allocated: "picked", picked: "packed", packed: "dispatched", dispatched: "delivered", delivered: null };
-  if (allowed[state.order.status] !== status) throw new Error(`Order cannot advance from ${state.order.status} to ${status}`);
+  if (allowed[state.order.status] !== status) throw conflict(`Order cannot advance from ${state.order.status} to ${status}`);
   state.order.status = status;
   if (status === "packed" && !state.shipment) {
     state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
@@ -425,7 +429,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
  */
 export function allocateCartFefo(state: DemoState) {
   if (!state.order || state.order.status !== "paid")
-    throw new Error("Only a paid order can be allocated");
+    throw conflict("Only a paid order can be allocated");
 
   const pending = new Map<string, number>();
   const planned: { lineNo: number; batch: Batch; quantity: number }[] = [];
@@ -446,7 +450,7 @@ export function allocateCartFefo(state: DemoState) {
       .sort((a, b) => a.expiry.localeCompare(b.expiry) || a.id.localeCompare(b.id))[0];
 
     if (!candidate)
-      throw new Error(
+      throw conflict(
         `Line ${line.lineNo}: no valid, in-date, non-quarantined stock covers ${line.quantity} unit(s)`,
       );
     pending.set(candidate.id, (pending.get(candidate.id) ?? 0) + line.quantity);
@@ -486,13 +490,13 @@ function setCourierFallback(state: DemoState) {
 }
 
 export function sortieCommand(state: DemoState, command: SortieCommand) {
-  if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "complete"].includes(command)) throw new Error("Unsupported sortie command");
-  if (!["reset_weather"].includes(command) && (!state.order || state.order.status !== "dispatched")) throw new Error("Delivery controls unlock after the order is dispatched");
+  if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "complete"].includes(command)) throw badRequest("Unsupported sortie command");
+  if (!["reset_weather"].includes(command) && (!state.order || state.order.status !== "dispatched")) throw conflict("Delivery controls unlock after the order is dispatched");
   if (command === "inject_weather") { state.sortie.weather = "unsafe"; state.sortie.status = "lockout"; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: false, detail: "Unsafe weather injected · flight locked out", severity: "danger" } : gate); state.sortie.fallbackReason = "Unsafe weather automatically created a ground-courier leg"; setCourierFallback(state); return; }
   if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.telemetry = []; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below the configured threshold", severity: undefined } : gate); if (state.shipment) { state.shipment.status = "in_transit"; state.shipment.legs = state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "in_transit" })); } return; }
   if (command === "fallback") { state.sortie.status = "courier_fallback"; state.sortie.fallbackReason = "Manual override requested a ground-courier handover"; setCourierFallback(state); return; }
-  if (command === "complete") { if (state.sortie.status !== "en_route") throw new Error("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
-  if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw new Error("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }
-  if (command === "launch") { if (state.sortie.status !== "cleared") throw new Error("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry()[0]]; return; }
-  if (command === "advance") { if (state.sortie.status !== "launched") throw new Error("Launch the sortie before advancing telemetry"); state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry(); return; }
+  if (command === "complete") { if (state.sortie.status !== "en_route") throw conflict("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
+  if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw conflict("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }
+  if (command === "launch") { if (state.sortie.status !== "cleared") throw conflict("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry()[0]]; return; }
+  if (command === "advance") { if (state.sortie.status !== "launched") throw conflict("Launch the sortie before advancing telemetry"); state.sortie.status = "en_route"; state.sortie.telemetry = buildTelemetry(); return; }
 }

@@ -1,13 +1,14 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/auth";
+import { badRequest, conflict } from "@/lib/errors";
 
 const NIGERIA_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000002";
 
 function normalizeIdempotencyKey(value: string | null) {
   const key = value?.trim() ?? "";
   if (key.length > 200)
-    throw new Error("Idempotency-Key must be 200 characters or fewer");
+    throw badRequest("Idempotency-Key must be 200 characters or fewer");
   return key;
 }
 
@@ -25,7 +26,7 @@ export async function getIdempotentResponse(
   if (error) throw new Error(`Idempotency read failed: ${error.message}`);
   if (!data) return null;
   if (data.operation !== operation)
-    throw new Error("Idempotency-Key was already used for another operation");
+    throw conflict("Idempotency-Key was already used for another operation");
   const response = data.response as { status?: unknown; body?: unknown };
   return {
     status: Number(response.status ?? 200),

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { apiError, jsonBody } from "@/lib/api";
 import { requireAuth, trustedRequestOrigin } from "@/lib/auth";
+import { upstreamFailure } from "@/lib/errors";
 import { normalizeCart, normalizeQuantity, validateDeliveryAddress } from "@/lib/domain";
 import { paystackSecret } from "@/lib/paystack";
 import {
@@ -74,7 +75,11 @@ export async function POST(request: Request) {
       !payload.data?.reference ||
       !payload.data.authorization_url
     )
-      throw new Error(payload.message ?? "Paystack initialization failed");
+      // Paystack's own message goes to the log, not to the browser: it can name
+      // the key or the account.
+      throw upstreamFailure(
+        `Paystack initialization failed (HTTP ${upstream.status}): ${payload.message ?? "unusable response"}`,
+      );
     const responseBody = {
       authorizationUrl: payload.data.authorization_url,
       accessCode: payload.data.access_code,

@@ -1,5 +1,6 @@
 import { apiError, jsonBody } from "@/lib/api";
 import { requireAuth, trustedRequestOrigin } from "@/lib/auth";
+import { notFound } from "@/lib/errors";
 import {
   getIdempotentResponse,
   recordAudit,
@@ -33,7 +34,7 @@ export async function POST(
       undefined,
       "safety_officer",
     );
-    if (!normalized?.state.order) throw new Error("Shipment not found");
+    if (!normalized?.state.order) throw notFound("Shipment not found");
     const responseBody = {
       sortie: normalized.state.sortie,
       order: normalized.state.order,

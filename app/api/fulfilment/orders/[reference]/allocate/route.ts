@@ -1,5 +1,6 @@
 import { apiError } from "@/lib/api";
 import { requireAuth, trustedRequestOrigin } from "@/lib/auth";
+import { notFound } from "@/lib/errors";
 import {
   getIdempotentResponse,
   recordAudit,
@@ -32,7 +33,7 @@ export async function POST(
       "warehouse_operator",
     );
     if (!normalized?.state.order)
-      throw new Error("Order not found in operator scope");
+      throw notFound("Order not found in operator scope");
     const batch = normalized.state.batches.find(
       (candidate) =>
         candidate.productId === normalized.state.order?.productId &&
