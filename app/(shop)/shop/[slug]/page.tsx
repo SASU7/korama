@@ -31,6 +31,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const product = await findProduct((await params).slug);
+  // Deliberately NOT notFound() here: throwing from generateMetadata makes
+  // Next commit the response as 200 and only render the not-found body. The
+  // page's own notFound() sets the status correctly.
   if (!product) return { title: "Product not found — Korama" };
   const image = productImageSrc(product.images?.[0]?.path);
   return {
