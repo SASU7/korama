@@ -6,7 +6,17 @@ major_version = 17
 [auth]
 enabled = true
 site_url = "https://korama.vercel.app"
-additional_redirect_urls = ["https://korama.vercel.app/auth/callback"]
+additional_redirect_urls = [
+  "https://korama.vercel.app/auth/callback",
+  "http://localhost:3000/auth/callback",
+]
+
+# Google sign-in. Credentials come from the Google Cloud OAuth client and are
+# read from the environment at `supabase config push` time — never committed.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 
 [auth.mfa.totp]
 enroll_enabled = true
