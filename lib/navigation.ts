@@ -4,6 +4,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   consumer: "Customer",
   warehouse_operator: "Warehouse operator",
   safety_officer: "Safety officer",
+  administrator: "Administrator",
 };
 
 /** Where a role switch lands you. */
@@ -11,6 +12,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   consumer: "/shop",
   warehouse_operator: "/operations",
   safety_officer: "/delivery",
+  administrator: "/admin/products",
 };
 
 export type WorkspaceSurface = "operations" | "compliance" | "delivery";

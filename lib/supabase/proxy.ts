@@ -5,7 +5,7 @@ import type { Database } from "@/lib/supabase/database.types";
 export const PATHNAME_HEADER = "x-korama-pathname";
 
 /** Paths that always require a signed-in user. */
-const PROTECTED = ["/account", "/checkout", "/operations", "/compliance", "/delivery"];
+const PROTECTED = ["/account", "/admin", "/checkout", "/operations", "/compliance", "/delivery"];
 
 export async function updateSession(request: NextRequest) {
   // Server layouts cannot read the request path, but a group layout needs it

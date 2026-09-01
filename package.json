@@ -17,7 +17,8 @@
     "env:check": "node scripts/check-env.mjs",
     "production:check": "node scripts/staging-preflight.mjs",
     "deployment:check": "node scripts/deployment-smoke.mjs",
-    "bundle:check": "node scripts/client-bundle-check.mjs"
+    "bundle:check": "node scripts/client-bundle-check.mjs",
+    "admin:grant": "node scripts/admin-grant.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "5.9.1",

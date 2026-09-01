@@ -1,24 +1,36 @@
 /**
  * Resolving a catalogue image.
  *
- * media.storage_path holds Supabase Storage keys like
- * "catalogue/nk-shea-balm.webp". The prototype serves the same filenames from
- * public/products/ so the app has no Storage dependency and no signed-URL
- * round trip. Point IMAGE_BASE at a Storage public URL to switch — this is
- * the only function that needs to change.
+ * media.storage_path holds "<bucket>/<object>" — e.g.
+ * "catalogue/nk-shea-balm.webp" — which maps directly onto Supabase Storage's
+ * public object endpoint. The `catalogue` bucket is public, so cards in the
+ * grid do not each need a signed-URL round trip.
+ *
+ * A path with no bucket segment is treated as a local file under /products,
+ * which keeps any hand-placed image working.
  */
-const IMAGE_BASE = "/products";
+export const CATALOGUE_BUCKET = "catalogue";
 
-export function productImageSrc(storagePath: string | undefined) {
+export function productImageSrc(storagePath: string | undefined | null) {
   if (!storagePath) return null;
-  const file = storagePath.split("/").pop();
-  if (!file) return null;
-  return `${IMAGE_BASE}/${file}`;
+  const clean = storagePath.replace(/^\/+/, "");
+  if (!clean) return null;
+
+  if (!clean.includes("/")) return `/products/${clean}`;
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return `/products/${clean.split("/").pop()}`;
+  return `${base}/storage/v1/object/public/${clean}`;
+}
+
+/** The storage_path to record for a newly uploaded object. */
+export function catalogueStoragePath(fileName: string) {
+  return `${CATALOGUE_BUCKET}/${fileName}`;
 }
 
 /**
- * A 1x1 warm-neutral pixel. Enough for next/image's blur placeholder to avoid
- * a flash of empty box without shipping a per-image base64 thumbnail.
+ * A 4:5 warm-neutral placeholder. Enough for next/image's blur to avoid a
+ * flash of empty box without shipping a per-image base64 thumbnail.
  */
 export const BLUR_DATA_URL =
   "data:image/svg+xml;base64," +

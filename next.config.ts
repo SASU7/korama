@@ -2,6 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  images: {
+    formats: ["image/avif", "image/webp"],
+    // Catalogue photography lives in the public `catalogue` Storage bucket.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cmusntqsaatsxndltdxe.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
+  },
   outputFileTracingRoot: process.cwd(),
   async headers() {
     return [{

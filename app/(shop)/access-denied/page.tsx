@@ -13,6 +13,7 @@ const REQUIRED: Record<string, { label: string; role: UserRole }> = {
   operations: { label: "Operations", role: "warehouse_operator" },
   compliance: { label: "Compliance", role: "warehouse_operator" },
   delivery: { label: "Delivery", role: "safety_officer" },
+  admin: { label: "Catalogue admin", role: "administrator" },
 };
 
 /**

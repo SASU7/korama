@@ -1,6 +1,11 @@
 export type MarketCode = "GH" | "NG";
 export type InventoryClass = "direct_import" | "ghana_origin_export" | "marketplace_future";
-export type UserRole = "consumer" | "warehouse_operator" | "safety_officer";
+export type UserRole =
+  | "consumer"
+  | "warehouse_operator"
+  | "safety_officer"
+  /** Catalogue ownership: create and edit products, upload imagery. */
+  | "administrator";
 export type MarketStatus = "active" | "roadmap" | "future";
 
 /** A configured market, as the markets screen renders it. */

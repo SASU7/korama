@@ -12,6 +12,7 @@ export const APP_ROLES = [
   "consumer",
   "warehouse_operator",
   "safety_officer",
+  "administrator",
 ] as const;
 
 export type AuthContext = {
