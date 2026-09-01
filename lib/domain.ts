@@ -34,6 +34,10 @@ export type Product = {
   expiry: string;
   ingredients?: string;
   transformation?: string;
+  /** Media rows exist in the schema and were previously discarded. */
+  images?: { path: string; alt: string }[];
+  variantName?: string;
+  sku?: string;
 };
 
 export type Batch = {

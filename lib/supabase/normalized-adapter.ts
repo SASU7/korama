@@ -61,7 +61,26 @@ function complianceForProduct(productIdValue: string, context: { batches: Row<"i
 function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperationalSnapshot, ghanaOperations: NormalizedOperationalSnapshot): Product {
   const allBatches = [...operations.batches, ...ghanaOperations.batches];
   const batches = allBatches.filter((batch) => batch.product_id === item.product.id);
-  const firstBatch = [...batches].sort((left, right) => (left.expiry_date ?? "9999-12-31").localeCompare(right.expiry_date ?? "9999-12-31") || left.id.localeCompare(right.id))[0];
+  // Mirror the FEFO predicate in korama_allocate_order_fefo. Sorting by expiry
+  // alone surfaced the *expired* batch on the product page — the storefront
+  // named NK-SB-2401 (expired 2026-08-02) while allocation would ship
+  // NK-SB-2407. A shopper must see the batch they will actually receive.
+  const today = new Date().toISOString().slice(0, 10);
+  const allocatable = batches.filter(
+    (batch) =>
+      !batch.quarantined &&
+      batch.customs_cleared &&
+      (batch.inventory_class !== "ghana_origin_export" || batch.origin_supported) &&
+      (batch.expiry_date === null || batch.expiry_date >= today) &&
+      batch.quantity - batch.allocated > 0,
+  );
+  const byExpiry = (list: typeof batches) =>
+    [...list].sort(
+      (left, right) =>
+        (left.expiry_date ?? "9999-12-31").localeCompare(right.expiry_date ?? "9999-12-31") ||
+        left.id.localeCompare(right.id),
+    )[0];
+  const firstBatch = byExpiry(allocatable) ?? byExpiry(batches);
   const metadata = object(item.product.attributes);
   const compliance = complianceForProduct(item.product.id, {
     batches: allBatches,
@@ -69,7 +88,7 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
     dutyQuotes: [...operations.dutyQuotes, ...ghanaOperations.dutyQuotes],
     certificates: [...operations.certificatePreviews, ...ghanaOperations.certificatePreviews],
   });
-  const available = batches.reduce((total, batch) => total + Math.max(0, batch.quantity - batch.allocated), 0);
+  const available = allocatable.reduce((total, batch) => total + Math.max(0, batch.quantity - batch.allocated), 0);
   const category = ["Beauty", "Fashion", "Pantry", "Home & craft"].includes(item.product.category) ? item.product.category as Product["category"] : "Home & craft";
   const currency = (item.listing.currency === "GHS" ? "GHS" : "NGN") as Product["currency"];
   return {
@@ -89,6 +108,14 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
     expiry: firstBatch?.expiry_date ?? "No expiry",
     ingredients: text(metadata.ingredients),
     transformation: text(metadata.transformation) || compliance?.transformation,
+    // listCatalogue already fetches these; toProduct used to drop them, which
+    // is why the catalogue had no imagery and no specification tab.
+    images: item.media.map((row) => ({
+      path: row.storage_path,
+      alt: row.alt_text,
+    })),
+    variantName: item.variant?.name ?? undefined,
+    sku: item.variant?.sku ?? undefined,
   };
 }
 
