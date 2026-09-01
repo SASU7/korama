@@ -360,6 +360,7 @@ export type Database = {
           airworthiness_current: boolean
           battery_percent: number
           id: string
+          manual_override_ready: boolean
           operating_company_id: string
           payload_limit_grams: number
           reference: string
@@ -368,6 +369,7 @@ export type Database = {
           airworthiness_current?: boolean
           battery_percent: number
           id?: string
+          manual_override_ready?: boolean
           operating_company_id: string
           payload_limit_grams: number
           reference: string
@@ -376,6 +378,7 @@ export type Database = {
           airworthiness_current?: boolean
           battery_percent?: number
           id?: string
+          manual_override_ready?: boolean
           operating_company_id?: string
           payload_limit_grams?: number
           reference?: string
@@ -1053,6 +1056,7 @@ export type Database = {
           currency: string
           delivery_address_snapshot: Json
           delivery_minor: number
+          delivery_method: string
           id: string
           market_id: string
           operating_company_id: string
@@ -1069,6 +1073,7 @@ export type Database = {
           currency: string
           delivery_address_snapshot?: Json
           delivery_minor: number
+          delivery_method?: string
           id?: string
           market_id: string
           operating_company_id: string
@@ -1085,6 +1090,7 @@ export type Database = {
           currency?: string
           delivery_address_snapshot?: Json
           delivery_minor?: number
+          delivery_method?: string
           id?: string
           market_id?: string
           operating_company_id?: string
@@ -1733,24 +1739,33 @@ export type Database = {
         Row: {
           created_at: string
           detail: string
+          event_sequence: number
           id: string
+          event_hash: string
           operating_company_id: string
+          previous_event_hash: string | null
           sortie_id: string
           status: Database["public"]["Enums"]["sortie_status"]
         }
         Insert: {
           created_at?: string
           detail: string
+          event_sequence?: number
           id?: string
+          event_hash?: string
           operating_company_id: string
+          previous_event_hash?: string | null
           sortie_id: string
           status: Database["public"]["Enums"]["sortie_status"]
         }
         Update: {
           created_at?: string
           detail?: string
+          event_sequence?: number
           id?: string
+          event_hash?: string
           operating_company_id?: string
+          previous_event_hash?: string | null
           sortie_id?: string
           status?: Database["public"]["Enums"]["sortie_status"]
         }
@@ -1773,9 +1788,11 @@ export type Database = {
       }
       sorties: {
         Row: {
+          authorization_id: string | null
           created_at: string
           drone_id: string
           id: string
+          geofence_id: string | null
           operating_company_id: string
           reference: string
           shipment_id: string
@@ -1783,9 +1800,11 @@ export type Database = {
           weather_status: string
         }
         Insert: {
+          authorization_id?: string | null
           created_at?: string
           drone_id: string
           id?: string
+          geofence_id?: string | null
           operating_company_id: string
           reference: string
           shipment_id: string
@@ -1793,9 +1812,11 @@ export type Database = {
           weather_status?: string
         }
         Update: {
+          authorization_id?: string | null
           created_at?: string
           drone_id?: string
           id?: string
+          geofence_id?: string | null
           operating_company_id?: string
           reference?: string
           shipment_id?: string
@@ -1803,6 +1824,20 @@ export type Database = {
           weather_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sorties_authorization_id_fkey"
+            columns: ["authorization_id"]
+            isOneToOne: false
+            referencedRelation: "authorizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sorties_geofence_id_fkey"
+            columns: ["geofence_id"]
+            isOneToOne: false
+            referencedRelation: "geofences"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sorties_drone_id_fkey"
             columns: ["drone_id"]
@@ -2200,6 +2235,7 @@ export type Database = {
       korama_create_order: {
         Args: {
           p_delivery_address: Json
+          p_delivery_method: string
           p_lines: Json
           p_market_id: string
           p_operating_company_id: string
@@ -2451,4 +2487,3 @@ export const Constants = {
     },
   },
 } as const
-

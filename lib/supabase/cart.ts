@@ -5,7 +5,7 @@ import { adminClient } from "@/lib/supabase/admin-client";
 import { authContext } from "@/lib/auth";
 import { CART_COOKIE, CART_COOKIE_MAX_AGE, mergeCarts, parseCart, serializeCart } from "@/lib/cart-cookie";
 import { normalizeCart, type CartLine } from "@/lib/domain";
-import { NIGERIA_MARKET_ID, NIGERIA_OPERATING_COMPANY_ID, productUuidForSlug, slugForProductUuid } from "@/lib/supabase/normalized-adapter";
+import { GHANA_MARKET_ID, GHANA_OPERATING_COMPANY_ID, productUuidForSlug, slugForProductUuid } from "@/lib/supabase/normalized-adapter";
 
 /**
  * Cart storage.
@@ -34,8 +34,8 @@ async function openCartId(profileId: string) {
     .insert({
       profile_id: profileId,
       status: "open",
-      market_id: NIGERIA_MARKET_ID,
-      operating_company_id: NIGERIA_OPERATING_COMPANY_ID,
+      market_id: GHANA_MARKET_ID,
+      operating_company_id: GHANA_OPERATING_COMPANY_ID,
     })
     .select("id")
     .single();

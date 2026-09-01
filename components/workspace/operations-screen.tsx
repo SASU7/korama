@@ -37,7 +37,7 @@ export function OperationsScreen() {
         meta={
           order
             ? `${order.reference} · ${order.lines.length} line(s) · ${order.itemCount} unit(s)`
-            : `${batches.length} batches at Lekki · ${eligibleUnits} units eligible`
+            : `${batches.length} batches at Accra · ${eligibleUnits} units eligible`
         }
         actions={
           order ? (
@@ -55,7 +55,7 @@ export function OperationsScreen() {
           // Operational facts, not a demo instruction. The previous copy read
           // "Complete the Nigerian shea checkout to activate the operator
           // workspace", which tells an operator nothing about their warehouse.
-          description={`Orders arrive here once Paystack confirms payment. Lekki currently holds ${batches.length} batches, ${eligibleUnits} units eligible for allocation${blocked.length ? `, and ${blocked.length} blocked` : ""}.`}
+          description={`Orders arrive here once Paystack confirms payment. Accra currently holds ${batches.length} batches, ${eligibleUnits} units eligible for allocation${blocked.length ? `, and ${blocked.length} blocked` : ""}.`}
           action={
             <Button variant="outline" asChild>
               <Link href="/shop">Open the shop</Link>

@@ -81,7 +81,7 @@ export function CheckoutForm({
     recipientName: "",
     addressLine: "",
     city: "",
-    countryCode: "NG",
+    countryCode: "GH",
   });
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -112,7 +112,7 @@ export function CheckoutForm({
           // Server-side idempotency: a double submit reuses the first order.
           "idempotency-key": crypto.randomUUID(),
         },
-        body: JSON.stringify({ lines: cart, address }),
+        body: JSON.stringify({ lines: cart, address, deliveryMethod: method }),
       });
       const body = (await response.json()) as {
         authorizationUrl?: string;
@@ -169,7 +169,7 @@ export function CheckoutForm({
               onChange={(value) => setAddress({ ...address, city: value })}
             />
             <p className="text-muted-foreground text-(length:--text-meta)">
-              Delivery is available to Nigerian addresses only.
+              Delivery is available to Ghanaian addresses only.
             </p>
           </CardContent>
         </Card>
@@ -180,20 +180,20 @@ export function CheckoutForm({
           </CardHeader>
           <CardContent>
             <RadioGroup value={method} onValueChange={setMethod} className="gap-3">
-              <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-[:disabled]:opacity-60">
-                <RadioGroupItem value="drone" disabled={!droneEligible} className="mt-0.5" />
-                <span className="flex-1">
-                  <span className="flex items-center gap-2 font-medium">
-                    <Plane className="size-4" aria-hidden />
-                    Simulated drone · Lekki micro-hub
+              {droneEligible && (
+                <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
+                  <RadioGroupItem value="drone" className="mt-0.5" />
+                  <span className="flex-1">
+                    <span className="flex items-center gap-2 font-medium">
+                      <Plane className="size-4" aria-hidden />
+                      Simulated drone · Accra micro-hub
+                    </span>
+                    <span className="text-muted-foreground block text-(length:--text-meta)">
+                      Parcel is {weightGrams} g, within the {DRONE_PAYLOAD_LIMIT_GRAMS} g payload limit.
+                    </span>
                   </span>
-                  <span className="text-muted-foreground block text-(length:--text-meta)">
-                    {droneEligible
-                      ? `Parcel is ${weightGrams} g, within the ${DRONE_PAYLOAD_LIMIT_GRAMS} g payload limit.`
-                      : `Unavailable: this parcel is ${weightGrams} g, over the ${DRONE_PAYLOAD_LIMIT_GRAMS} g payload limit.`}
-                  </span>
-                </span>
-              </label>
+                </label>
+              )}
               <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                 <RadioGroupItem value="courier" className="mt-0.5" />
                 <span className="flex-1">
@@ -208,6 +208,14 @@ export function CheckoutForm({
                 </span>
               </label>
             </RadioGroup>
+            {!droneEligible && (
+              <Alert className="mt-3">
+                <Truck />
+                <AlertDescription>
+                  This {weightGrams} g parcel exceeds the {DRONE_PAYLOAD_LIMIT_GRAMS} g simulated payload limit, so ground courier is required.
+                </AlertDescription>
+              </Alert>
+            )}
             <p className="text-muted-foreground mt-3 text-(length:--text-meta)">
               Delivery is charged at{" "}
               <Money minor={quote.deliveryMinor} currency={quote.currency} /> for

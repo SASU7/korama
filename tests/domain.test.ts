@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { trustedRequestOrigin } from "../lib/request-security.ts";
-import { allocateCartFefo, apportionDelivery, assessOrigin, calculateQuote, cartWeightGrams, markOrder, normalizeCart, normalizeQuantity, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress, type CartLine, type DemoState, type Order, type Quote } from "../lib/domain.ts";
+import { allocateCartFefo, apportionDelivery, assessOrigin, calculateQuote, cartWeightGrams, markOrder, normalizeCart, normalizeQuantity, resolveDeliveryMethod, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress, type CartLine, type DeliveryMethod, type DemoState, type Order, type Quote } from "../lib/domain.ts";
 
 /** Build the Order shape a quote implies, so tests read like the real flow. */
-function orderFrom(state: DemoState, cart: CartLine[], status: Order["status"], reference = "KOR-NG-240829-001"): Order {
+function orderFrom(state: DemoState, cart: CartLine[], status: Order["status"], reference = "KOR-GH-260901-001", deliveryMethod: DeliveryMethod = "simulated_drone"): Order {
   const quote: Quote = calculateQuote(state, cart);
   return {
     reference,
@@ -29,12 +29,20 @@ function orderFrom(state: DemoState, cart: CartLine[], status: Order["status"], 
     taxMinor: quote.taxMinor,
     deliveryMinor: quote.deliveryMinor,
     totalMinor: quote.totalMinor,
-    currency: "NGN",
+    currency: "GHS",
     itemCount: quote.itemCount,
+    deliveryMethod,
     productId: cart[0].productId,
     quantity: cart[0].quantity,
   };
 }
+
+test("delivery routing is normalized server-side and overweight parcels always use a courier", () => {
+  assert.equal(resolveDeliveryMethod("drone", 2000), "simulated_drone");
+  assert.equal(resolveDeliveryMethod("courier", 180), "ground_courier");
+  assert.equal(resolveDeliveryMethod("simulated_drone", 2001), "ground_courier");
+  assert.throws(() => resolveDeliveryMethod("helicopter", 180), /delivery method/i);
+});
 
 test("the seed contains the two-way catalogue and a roadmap listing", () => {
   const state = seedDemoState();
@@ -60,7 +68,7 @@ test("FEFO skips a valid batch that cannot cover the full order", () => {
 
 test("allocation only advances a paid order and never creates a negative balance", () => {
   const state = seedDemoState();
-  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "paid", "KOR-NG-240829-001");
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "paid", "KOR-GH-260901-001");
   const allocations = allocateCartFefo(state);
   assert.equal(state.order!.status, "allocated");
   assert.equal(allocations.length, 1);
@@ -70,8 +78,8 @@ test("allocation only advances a paid order and never creates a negative balance
 
 test("unsafe weather locks a sortie and records courier fallback", () => {
   const state = seedDemoState();
-  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
-  state.shipment = { reference: "SHP-KOR-NG-240829-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" }] };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-GH-260901-001");
+  state.shipment = { reference: "SHP-KOR-GH-260901-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" }] };
   sortieCommand(state, "inject_weather");
   assert.equal(state.sortie.status, "lockout");
   assert.equal(state.sortie.gates.find((gate) => gate.key === "weather")?.passed, false);
@@ -84,7 +92,8 @@ test("unsafe weather locks a sortie and records courier fallback", () => {
 
 test("failed preflight does not make a sortie launchable", () => {
   const state = seedDemoState();
-  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-GH-260901-001");
+  state.shipment = { reference: "SHP-KOR-GH-260901-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" }] };
   state.sortie.gates[3].passed = false;
   assert.throws(() => sortieCommand(state, "preflight"), /Preflight blocked/);
   assert.equal(state.sortie.status, "draft");
@@ -93,8 +102,8 @@ test("failed preflight does not make a sortie launchable", () => {
 
 test("a cleared sortie launches before telemetry advances en route", () => {
   const state = seedDemoState();
-  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
-  state.shipment = { reference: "SHP-KOR-NG-240829-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" }] };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-GH-260901-001");
+  state.shipment = { reference: "SHP-KOR-GH-260901-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" }] };
   sortieCommand(state, "preflight");
   assert.equal(state.sortie.status, "cleared");
   sortieCommand(state, "launch");
@@ -107,7 +116,7 @@ test("a cleared sortie launches before telemetry advances en route", () => {
 
 test("dispatch creates a shipment and delivery completion closes its leg", () => {
   const state = seedDemoState();
-  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "picked", "KOR-NG-240829-001");
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "picked", "KOR-GH-260901-001");
   state.orderEvents[0].complete = true;
   markOrder(state, "packed");
   markOrder(state, "dispatched");
@@ -120,15 +129,40 @@ test("dispatch creates a shipment and delivery completion closes its leg", () =>
   assert.equal(state.shipment?.legs[0]?.status, "complete");
 });
 
+test("a courier-routed order never creates or unlocks a simulated drone leg", () => {
+  const state = seedDemoState();
+  state.order = orderFrom(state, [{ productId: "direct-blender", quantity: 2 }], "picked", "KOR-GH-COURIER-001", "ground_courier");
+  state.orderEvents[0].complete = true;
+  markOrder(state, "packed");
+  markOrder(state, "dispatched");
+  assert.equal(state.shipment?.legs.length, 1);
+  assert.equal(state.shipment?.legs[0]?.mode, "ground_courier");
+  assert.throws(() => sortieCommand(state, "preflight"), /courier/i);
+});
+
+test("an in-flight abort stops the simulated leg and creates one courier fallback", () => {
+  const state = seedDemoState();
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched");
+  state.shipment = { reference: "SHP-KOR-GH-260901-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" }] };
+  sortieCommand(state, "preflight");
+  sortieCommand(state, "launch");
+  sortieCommand(state, "abort");
+  assert.equal(state.sortie.status, "abort");
+  assert.match(state.sortie.fallbackReason ?? "", /abort/i);
+  assert.equal(state.shipment?.legs[0]?.status, "fallback");
+  assert.equal(state.shipment?.legs.filter((leg) => leg.mode === "ground_courier").length, 1);
+});
+
 test("origin assessment rejects repackaging and keeps qualifying evidence provisional", () => {
   assert.equal(assessOrigin("Repackaging and relabelling only", ["Producer invoice", "Packing slip"]).status, "rejected");
   assert.equal(assessOrigin("Blended, filled, and batch-tested in Ghana", ["Producer invoice", "Transformation log"]).status, "provisionally_eligible");
 });
 
-test("delivery address validation keeps checkout scoped to Nigeria", () => {
-  assert.deepEqual(validateDeliveryAddress({ recipientName: "Amina Okafor", addressLine: "12 Admiralty Way", city: "Lagos", countryCode: "ng" }), { recipientName: "Amina Okafor", addressLine: "12 Admiralty Way", city: "Lagos", countryCode: "NG" });
-  assert.throws(() => validateDeliveryAddress({ recipientName: "A", addressLine: "12 Way", city: "Lagos", countryCode: "NG" }), /recipient name/);
-  assert.throws(() => validateDeliveryAddress({ recipientName: "Amina Okafor", addressLine: "12 Admiralty Way", city: "Accra", countryCode: "GH" }), /Nigerian delivery addresses/);
+test("delivery address validation keeps checkout scoped to Ghana", () => {
+  assert.deepEqual(validateDeliveryAddress({ recipientName: "Ama Mensah", addressLine: "14 Oxford Street", city: "Accra", countryCode: "gh" }), { recipientName: "Ama Mensah", addressLine: "14 Oxford Street", city: "Accra", countryCode: "GH" });
+  assert.throws(() => validateDeliveryAddress({ recipientName: "A", addressLine: "14 Oxford Street", city: "Accra", countryCode: "GH" }), /recipient name/);
+  // Nigeria is parked: Paystack cannot settle an NGN order on this account.
+  assert.throws(() => validateDeliveryAddress({ recipientName: "Amina Okafor", addressLine: "12 Admiralty Way", city: "Lagos", countryCode: "NG" }), /Ghanaian delivery addresses/);
 });
 
 test("quantity validation rejects malformed or out-of-range quantities", () => {

@@ -24,7 +24,8 @@ export type Market = {
   checkoutEnabled: boolean;
 };
 export type OrderStatus = "pending_payment" | "paid" | "allocated" | "picked" | "packed" | "dispatched" | "delivered";
-export type SortieStatus = "draft" | "preflight" | "cleared" | "launched" | "en_route" | "delivered" | "lockout" | "courier_fallback";
+export type SortieStatus = "draft" | "preflight" | "cleared" | "launched" | "en_route" | "delivered" | "lockout" | "abort" | "return" | "courier_fallback";
+export type DeliveryMethod = "simulated_drone" | "ground_courier";
 
 export type Product = {
   id: string;
@@ -34,7 +35,7 @@ export type Product = {
   origin: InventoryClass;
   description: string;
   priceMinor: number;
-  currency: "NGN" | "GHS";
+  currency: "GHS" | "NGN";
   weightGrams: number;
   market: MarketCode;
   purchasable: boolean;
@@ -97,7 +98,7 @@ export type Quote = {
   taxMinor: number;
   deliveryMinor: number;
   totalMinor: number;
-  currency: "NGN";
+  currency: "GHS" | "NGN";
   itemCount: number;
 };
 
@@ -132,12 +133,12 @@ export const DELIVERY_DIRECT_IMPORT_MINOR = 550000;
 export const DRONE_PAYLOAD_LIMIT_GRAMS = 2000;
 
 export type OrderEvent = { status: OrderStatus; label: string; detail: string; at: string; complete: boolean };
-export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "NG" };
+export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "GH" };
 export type TransferStep = { label: string; detail: string; complete: boolean };
 /**
  * All fields after certificateWatermark are optional so the fallback snapshot
  * stays valid. They exist because the certificate preview used to hardcode
- * "Nokware shea repair balm", "NK-SB-2407" and "Tema → Lekki" as string
+ * "Nokware shea repair balm", "NK-SB-2407" and "Tema → Accra" as string
  * literals — correct for exactly one order and wrong for every other.
  */
 export type ComplianceSnapshot = {
@@ -150,7 +151,7 @@ export type ComplianceSnapshot = {
   productReference?: string;
   /** Refreshed at allocation to the batch that actually shipped. */
   batchReference?: string;
-  /** Derived from transfers -> sites, e.g. "Tema → Lekki". */
+  /** Derived from transfers -> sites, e.g. "Tema → Accra". */
   movement?: string;
   assessedAt?: string;
 };
@@ -158,7 +159,7 @@ export type ComplianceState = ComplianceSnapshot;
 export type Gate = { key: string; label: string; detail: string; passed: boolean; severity?: "warning" | "danger" };
 export type Sortie = { status: SortieStatus; weather: "clear" | "unsafe"; telemetry: { point: string; altitude: number; speed: number; battery: number; link: string }[]; gates: Gate[]; fallbackReason?: string };
 export type OriginAssessment = { status: "provisionally_eligible" | "rejected"; reason: string };
-export type DeliveryLeg = { sequenceNo: number; mode: "simulated_drone" | "ground_courier"; origin: string; destination: string; status: "planned" | "in_transit" | "complete" | "fallback" };
+export type DeliveryLeg = { sequenceNo: number; mode: DeliveryMethod; origin: string; destination: string; status: "planned" | "in_transit" | "complete" | "fallback" };
 export type Shipment = { reference: string; status: "planned" | "in_transit" | "delivered" | "fallback"; legs: DeliveryLeg[]; compliance?: ComplianceSnapshot };
 
 export type Order = {
@@ -169,8 +170,10 @@ export type Order = {
   taxMinor: number;
   deliveryMinor: number;
   totalMinor: number;
-  currency: "NGN";
+  currency: "GHS" | "NGN";
   itemCount: number;
+  /** Server-resolved route; overweight parcels can never retain drone routing. */
+  deliveryMethod: DeliveryMethod;
   address?: DeliveryAddress;
   compliance?: ComplianceSnapshot;
   paymentReference?: string;
@@ -201,22 +204,22 @@ const money = (value: number) => Math.round(value);
 
 export const seedDemoState = (): DemoState => {
   const products: Product[] = [
-    { id: "shea-balm", name: "Nokware shea repair balm", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "A rich, fragrance-free shea balm made in Accra and pre-positioned at Lekki.", priceMinor: 485000, currency: "NGN", weightGrams: 180, market: "NG", purchasable: true, stockLabel: "Lekki · 42 units", batch: "NK-SB-2407", expiry: "2027-01-07", ingredients: "Shea butter, baobab oil, vitamin E", transformation: "Blended, filled, labelled, and batch-tested in Ghana" },
-    { id: "shea-oil", name: "Nokware daily body oil", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "Lightweight Ghana-origin body oil for the everyday ritual.", priceMinor: 620000, currency: "NGN", weightGrams: 220, market: "NG", purchasable: true, stockLabel: "Lekki · 18 units", batch: "NK-DO-2408", expiry: "2027-04-12", ingredients: "Baobab, moringa, sunflower oil", transformation: "Pressed, blended, filled, and batch-tested in Ghana" },
-    { id: "kente-tote", name: "Handwoven Kente market tote", category: "Fashion", producer: "Ahenema Weavers · Kumasi", origin: "ghana_origin_export", description: "A structured tote woven and finished by a small Kumasi workshop.", priceMinor: 950000, currency: "NGN", weightGrams: 420, market: "NG", purchasable: true, stockLabel: "Lekki · 9 units", batch: "AW-KT-18", expiry: "No expiry", transformation: "Woven, cut, sewn, and finished in Ghana" },
-    { id: "cocoa-granola", name: "Cocoa nib breakfast granola", category: "Pantry", producer: "Atinka Foods · Tema", origin: "ghana_origin_export", description: "Small-batch granola with Ghana cocoa nibs; illustrative export stock.", priceMinor: 380000, currency: "NGN", weightGrams: 350, market: "NG", purchasable: true, stockLabel: "Lekki · 26 units", batch: "AF-CG-2406", expiry: "2026-11-18", ingredients: "Oats, cocoa nibs, coconut, honey", transformation: "Mixed, baked, packed, and batch-tested in Ghana" },
-    { id: "direct-blender", name: "Compact kitchen blender", category: "Home & craft", producer: "Global supplier · cleared in Nigeria", origin: "direct_import", description: "Third-country inventory imported directly into Nigeria and cleared locally.", priceMinor: 2150000, currency: "NGN", weightGrams: 1900, market: "NG", purchasable: true, stockLabel: "Lekki · 6 units", batch: "DI-NG-081", expiry: "No expiry" },
-    { id: "direct-scarf", name: "Linen travel scarf", category: "Fashion", producer: "Global supplier · cleared in Nigeria", origin: "direct_import", description: "A direct-import comparison product; it never routes through Ghana.", priceMinor: 730000, currency: "NGN", weightGrams: 180, market: "NG", purchasable: true, stockLabel: "Lekki · 14 units", batch: "DI-NG-074", expiry: "No expiry" },
-    { id: "ghana-basket", name: "Bolga storage basket", category: "Home & craft", producer: "Tamale Basket Collective · Ghana", origin: "ghana_origin_export", description: "Hand-finished storage basket from a northern Ghana co-operative.", priceMinor: 760000, currency: "NGN", weightGrams: 650, market: "NG", purchasable: true, stockLabel: "Tema staging · export queue", batch: "TB-24-11", expiry: "No expiry", transformation: "Woven and finished in Ghana" },
-    { id: "ghana-cocoa", name: "Single-origin cocoa powder", category: "Pantry", producer: "Volta Cocoa Works · Ghana", origin: "ghana_origin_export", description: "Ghana-origin pantry staple; illustrative market listing.", priceMinor: 440000, currency: "GHS", weightGrams: 500, market: "GH", purchasable: true, stockLabel: "Tema · 31 units", batch: "VCW-2409", expiry: "2027-02-04", ingredients: "100% cocoa", transformation: "Fermented, roasted, milled, and packed in Ghana" },
-    { id: "direct-lamp", name: "Rattan reading lamp", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana for local sale.", priceMinor: 1120000, currency: "GHS", weightGrams: 1100, market: "GH", purchasable: true, stockLabel: "Tema · 8 units", batch: "DI-GH-033", expiry: "No expiry" },
-    { id: "future-marketplace", name: "Future maker marketplace listing", category: "Home & craft", producer: "Third-party seller · roadmap", origin: "marketplace_future", description: "A roadmap-only seller listing; settlement is not enabled in this prototype.", priceMinor: 0, currency: "NGN", weightGrams: 100, market: "NG", purchasable: false, stockLabel: "Future capability", batch: "Not assigned", expiry: "No expiry" },
+    { id: "shea-balm", name: "Nokware shea repair balm", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "A rich, fragrance-free shea balm made and pre-positioned in Accra.", priceMinor: 485000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Accra · 42 units", batch: "NK-SB-2407", expiry: "2027-01-07", ingredients: "Shea butter, baobab oil, vitamin E", transformation: "Blended, filled, labelled, and batch-tested in Ghana" },
+    { id: "shea-oil", name: "Nokware daily body oil", category: "Beauty", producer: "Nokware Skincare · Ghana", origin: "ghana_origin_export", description: "Lightweight Ghana-origin body oil for the everyday ritual.", priceMinor: 620000, currency: "GHS", weightGrams: 220, market: "GH", purchasable: true, stockLabel: "Accra · 18 units", batch: "NK-DO-2408", expiry: "2027-04-12", ingredients: "Baobab, moringa, sunflower oil", transformation: "Pressed, blended, filled, and batch-tested in Ghana" },
+    { id: "kente-tote", name: "Handwoven Kente market tote", category: "Fashion", producer: "Ahenema Weavers · Kumasi", origin: "ghana_origin_export", description: "A structured tote woven and finished by a small Kumasi workshop.", priceMinor: 950000, currency: "GHS", weightGrams: 420, market: "GH", purchasable: true, stockLabel: "Accra · 9 units", batch: "AW-KT-18", expiry: "No expiry", transformation: "Woven, cut, sewn, and finished in Ghana" },
+    { id: "cocoa-granola", name: "Cocoa nib breakfast granola", category: "Pantry", producer: "Atinka Foods · Tema", origin: "ghana_origin_export", description: "Small-batch granola with Ghana cocoa nibs; illustrative export stock.", priceMinor: 380000, currency: "GHS", weightGrams: 350, market: "GH", purchasable: true, stockLabel: "Accra · 26 units", batch: "AF-CG-2406", expiry: "2026-11-18", ingredients: "Oats, cocoa nibs, coconut, honey", transformation: "Mixed, baked, packed, and batch-tested in Ghana" },
+    { id: "direct-blender", name: "Compact kitchen blender", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana and cleared locally.", priceMinor: 2150000, currency: "GHS", weightGrams: 1900, market: "GH", purchasable: true, stockLabel: "Accra · 6 units", batch: "DI-GH-081", expiry: "No expiry" },
+    { id: "direct-scarf", name: "Linen travel scarf", category: "Fashion", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "A direct-import comparison product; it carries no Ghana-origin claim.", priceMinor: 730000, currency: "GHS", weightGrams: 180, market: "GH", purchasable: true, stockLabel: "Accra · 14 units", batch: "DI-GH-074", expiry: "No expiry" },
+    { id: "ghana-basket", name: "Bolga storage basket", category: "Home & craft", producer: "Tamale Basket Collective · Ghana", origin: "ghana_origin_export", description: "Hand-finished storage basket from a northern Ghana co-operative.", priceMinor: 760000, currency: "GHS", weightGrams: 650, market: "GH", purchasable: true, stockLabel: "Accra · 5 units", batch: "TB-24-11", expiry: "No expiry", transformation: "Woven and finished in Ghana" },
+    { id: "ghana-cocoa", name: "Single-origin cocoa powder", category: "Pantry", producer: "Volta Cocoa Works · Ghana", origin: "ghana_origin_export", description: "Ghana-origin pantry staple; illustrative market listing.", priceMinor: 440000, currency: "GHS", weightGrams: 500, market: "GH", purchasable: true, stockLabel: "Accra · 31 units", batch: "VCW-2409", expiry: "2027-02-04", ingredients: "100% cocoa", transformation: "Fermented, roasted, milled, and packed in Ghana" },
+    { id: "direct-lamp", name: "Rattan reading lamp", category: "Home & craft", producer: "Global supplier · cleared in Ghana", origin: "direct_import", description: "Third-country inventory imported directly into Ghana for local sale.", priceMinor: 1120000, currency: "GHS", weightGrams: 1100, market: "GH", purchasable: true, stockLabel: "Accra · 8 units", batch: "DI-GH-033", expiry: "No expiry" },
+    { id: "future-marketplace", name: "Future maker marketplace listing", category: "Home & craft", producer: "Third-party seller · roadmap", origin: "marketplace_future", description: "A roadmap-only seller listing; settlement is not enabled in this prototype.", priceMinor: 0, currency: "GHS", weightGrams: 100, market: "GH", purchasable: false, stockLabel: "Future capability", batch: "Not assigned", expiry: "No expiry" },
   ];
 
   const initialEvents: OrderEvent[] = [
     { status: "pending_payment", label: "Order created", detail: "Awaiting server-confirmed Paystack test payment", at: now, complete: false },
     { status: "paid", label: "Payment verified", detail: "Amount and currency match the server quote", at: "", complete: false },
-    { status: "allocated", label: "Batch allocated", detail: "FEFO selected the earliest valid Lekki batch", at: "", complete: false },
+    { status: "allocated", label: "Batch allocated", detail: "FEFO selected the earliest valid Accra batch", at: "", complete: false },
     { status: "picked", label: "Picked", detail: "Warehouse operator confirms scan", at: "", complete: false },
     { status: "packed", label: "Packed", detail: "Weight captured for delivery routing", at: "", complete: false },
     { status: "dispatched", label: "Dispatched", detail: "Handover to simulated last-mile delivery", at: "", complete: false },
@@ -231,18 +234,18 @@ export const seedDemoState = (): DemoState => {
     shipment: null,
     orderEvents: initialEvents,
     batches: [
-      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Lekki warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "expired" },
-      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "eligible" },
-      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Lekki warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true, status: "quarantined" },
+      { id: "batch-expired", batch: "NK-SB-2401", productId: "shea-balm", site: "Accra warehouse", expiry: "2026-08-02", quantity: 8, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "expired" },
+      { id: "batch-current", batch: "NK-SB-2407", productId: "shea-balm", site: "Accra warehouse", expiry: "2027-01-07", quantity: 42, allocated: 0, quarantined: false, cleared: true, originSupported: true, status: "eligible" },
+      { id: "batch-quarantine", batch: "NK-SB-QA", productId: "shea-balm", site: "Accra warehouse", expiry: "2027-03-01", quantity: 4, allocated: 0, quarantined: true, cleared: true, originSupported: true, status: "quarantined" },
     ],
     transfer: [
       { label: "Ghana production", detail: "Transformation record linked to NK-SB-2407", complete: true },
       { label: "Tema staging", detail: "Received into Ghana export staging", complete: true },
       { label: "Bulk export", detail: "Cleared for export with provisional evidence", complete: true },
-      { label: "Lekki receipt", detail: "Destination stock received and reconciled", complete: true },
+      { label: "Accra receipt", detail: "Destination stock received and reconciled", complete: true },
     ],
     tasks: [
-      { label: "Receive batch", detail: "NK-SB-2407 · 42 units at Lekki", done: true },
+      { label: "Receive batch", detail: "NK-SB-2407 · 42 units at Accra", done: true },
       { label: "Allocate FEFO", detail: "Choose earliest valid, non-quarantined batch", done: false },
       { label: "Pick + scan", detail: "Confirm one unit against the pick list", done: false },
       { label: "Pack + weigh", detail: "Capture 180g parcel weight", done: false },
@@ -252,7 +255,7 @@ export const seedDemoState = (): DemoState => {
     sortie: { status: "draft", weather: "clear", telemetry: [], gates: [
       { key: "payload", label: "Payload", detail: "180g / 2kg simulated limit", passed: true },
       { key: "aircraft", label: "Aircraft condition", detail: "KOR-D01 · airworthiness current", passed: true },
-      { key: "authorization", label: "Authorization window", detail: "Simulated Nigerian authorization on file", passed: true },
+      { key: "authorization", label: "Authorization window", detail: "Simulated Ghanaian authorization on file", passed: true },
       { key: "weather", label: "Weather", detail: "Wind and rain below the configured threshold", passed: true },
       { key: "geofence", label: "Geofence", detail: "Route avoids restricted corridors", passed: true },
       { key: "battery", label: "Battery", detail: "94% · reserve protected", passed: true },
@@ -269,17 +272,33 @@ export function validateDeliveryAddress(value: unknown): DeliveryAddress {
   const recipientName = String(input.recipientName ?? "").trim();
   const addressLine = String(input.addressLine ?? "").trim();
   const city = String(input.city ?? "").trim();
-  const countryCode = String(input.countryCode ?? "NG").trim().toUpperCase();
+  const countryCode = String(input.countryCode ?? "GH").trim().toUpperCase();
   if (recipientName.length < 2) throw badRequest("Enter the recipient name");
   if (addressLine.length < 5) throw badRequest("Enter a delivery address");
   if (city.length < 2) throw badRequest("Enter the delivery city");
-  if (countryCode !== "NG") throw badRequest("Checkout is currently available only for Nigerian delivery addresses");
-  return { recipientName, addressLine, city, countryCode: "NG" };
+  if (countryCode !== "GH") throw badRequest("Checkout is currently available only for Ghanaian delivery addresses");
+  return { recipientName, addressLine, city, countryCode: "GH" };
 }
 export function normalizeQuantity(value: unknown): number {
   const quantity = Number(value ?? 1);
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) throw badRequest("Quantity must be a whole number between 1 and 10");
   return quantity;
+}
+/**
+ * Normalize a checkout preference into the canonical server-owned delivery
+ * route. The payload ceiling is a hard rule: a client can request a drone but
+ * cannot override an overweight courier fallback.
+ */
+export function resolveDeliveryMethod(value: unknown, weightGrams: number): DeliveryMethod {
+  const requested = String(value ?? "drone").trim().toLowerCase();
+  if (!["drone", "courier", "simulated_drone", "ground_courier"].includes(requested))
+    throw badRequest("Choose a supported delivery method");
+  if (!Number.isFinite(weightGrams) || weightGrams < 0)
+    throw badRequest("Parcel weight must be a non-negative number");
+  if (weightGrams > DRONE_PAYLOAD_LIMIT_GRAMS) return "ground_courier";
+  return requested === "courier" || requested === "ground_courier"
+    ? "ground_courier"
+    : "simulated_drone";
 }
 export function formatMoney(value: number, currency: string) { return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-GH", { style: "currency", currency, maximumFractionDigits: 0 }).format(value / 100); }
 /**
@@ -367,7 +386,7 @@ export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
     taxMinor,
     deliveryMinor,
     totalMinor: subtotalMinor + taxMinor + deliveryMinor,
-    currency: "NGN" as const,
+    currency: "GHS" as const,
     itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
   };
 }
@@ -406,7 +425,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   if (allowed[state.order.status] !== status) throw conflict(`Order cannot advance from ${state.order.status} to ${status}`);
   state.order.status = status;
   if (status === "packed" && !state.shipment) {
-    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
+    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: state.order.deliveryMethod, origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
   }
   if (status === "dispatched" && state.shipment) {
     state.shipment.status = "in_transit";
@@ -414,7 +433,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   }
   if (status === "delivered" && state.shipment) {
     state.shipment.status = "delivered";
-    state.shipment.legs = state.shipment.legs.map((leg) => leg.mode === "simulated_drone" ? { ...leg, status: "complete" } : leg);
+    state.shipment.legs = state.shipment.legs.map((leg) => ({ ...leg, status: "complete" }));
   }
   const event = state.orderEvents.find((item) => item.status === status);
   if (event) { event.complete = true; event.at = stamp(); }
@@ -472,12 +491,12 @@ export function allocateCartFefo(state: DemoState) {
   return planned;
 }
 export function buildTelemetry() { return [
-  { point: "Lekki launch pad", altitude: 0, speed: 0, battery: 94, link: "Strong" },
-  { point: "Lekki corridor", altitude: 82, speed: 34, battery: 88, link: "Strong" },
+  { point: "Accra launch pad", altitude: 0, speed: 0, battery: 94, link: "Strong" },
+  { point: "Accra corridor", altitude: 82, speed: 34, battery: 88, link: "Strong" },
   { point: "Coastal waypoint", altitude: 96, speed: 39, battery: 79, link: "Strong" },
   { point: "Fictional micro-hub", altitude: 0, speed: 0, battery: 71, link: "Strong" },
 ]; }
-export type SortieCommand = "preflight" | "launch" | "advance" | "inject_weather" | "reset_weather" | "fallback" | "complete";
+export type SortieCommand = "preflight" | "launch" | "advance" | "inject_weather" | "reset_weather" | "fallback" | "abort" | "complete";
 
 function setCourierFallback(state: DemoState) {
   if (!state.shipment) return;
@@ -485,16 +504,26 @@ function setCourierFallback(state: DemoState) {
   state.shipment.status = "fallback";
   state.shipment.legs = [
     ...state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "fallback" as const })),
-    existingCourierLeg ? { ...existingCourierLeg, status: "in_transit" as const } : { sequenceNo: state.shipment.legs.length + 1, mode: "ground_courier" as const, origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" as const },
+    existingCourierLeg ? { ...existingCourierLeg, status: "in_transit" as const } : { sequenceNo: state.shipment.legs.length + 1, mode: "ground_courier" as const, origin: "Accra warehouse", destination: "Fictional Accra micro-hub", status: "in_transit" as const },
   ];
 }
 
 export function sortieCommand(state: DemoState, command: SortieCommand) {
-  if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "complete"].includes(command)) throw badRequest("Unsupported sortie command");
+  if (!["preflight", "launch", "advance", "inject_weather", "reset_weather", "fallback", "abort", "complete"].includes(command)) throw badRequest("Unsupported sortie command");
   if (!["reset_weather"].includes(command) && (!state.order || state.order.status !== "dispatched")) throw conflict("Delivery controls unlock after the order is dispatched");
+  if (command !== "reset_weather" && !state.shipment?.legs.some((leg) => leg.mode === "simulated_drone"))
+    throw conflict("This order is routed entirely by ground courier; no simulated sortie exists");
   if (command === "inject_weather") { state.sortie.weather = "unsafe"; state.sortie.status = "lockout"; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: false, detail: "Unsafe weather injected · flight locked out", severity: "danger" } : gate); state.sortie.fallbackReason = "Unsafe weather automatically created a ground-courier leg"; setCourierFallback(state); return; }
   if (command === "reset_weather") { state.sortie.weather = "clear"; state.sortie.status = "draft"; state.sortie.telemetry = []; state.sortie.fallbackReason = undefined; state.sortie.gates = state.sortie.gates.map((gate) => gate.key === "weather" ? { ...gate, passed: true, detail: "Wind and rain below the configured threshold", severity: undefined } : gate); if (state.shipment) { state.shipment.status = "in_transit"; state.shipment.legs = state.shipment.legs.filter((leg) => leg.mode !== "ground_courier").map((leg) => ({ ...leg, status: "in_transit" })); } return; }
   if (command === "fallback") { state.sortie.status = "courier_fallback"; state.sortie.fallbackReason = "Manual override requested a ground-courier handover"; setCourierFallback(state); return; }
+  if (command === "abort") {
+    if (!["cleared", "launched", "en_route"].includes(state.sortie.status))
+      throw conflict("Only a cleared or active sortie can be aborted");
+    state.sortie.status = "abort";
+    state.sortie.fallbackReason = "Safety officer aborted the simulated sortie and requested a ground-courier handover";
+    setCourierFallback(state);
+    return;
+  }
   if (command === "complete") { if (state.sortie.status !== "en_route") throw conflict("The sortie is not en route"); state.sortie.status = "delivered"; if (state.order?.status === "dispatched") markOrder(state, "delivered"); return; }
   if (command === "preflight") { if (state.sortie.gates.some((gate) => !gate.passed)) throw conflict("Preflight blocked: resolve every safety gate first"); state.sortie.status = "cleared"; return; }
   if (command === "launch") { if (state.sortie.status !== "cleared") throw conflict("Complete a successful preflight before launch"); state.sortie.status = "launched"; state.sortie.telemetry = [buildTelemetry()[0]]; return; }

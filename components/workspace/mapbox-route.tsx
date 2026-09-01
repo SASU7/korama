@@ -31,7 +31,7 @@ export function MapboxRoutePreview() {
         map = new mapboxgl.Map({
           container: containerRef.current,
           style: "mapbox://styles/mapbox/light-v11",
-          center: [3.55, 6.45],
+          center: [-0.13, 5.63],
           zoom: 10,
           attributionControl: true,
         });
@@ -48,9 +48,9 @@ export function MapboxRoutePreview() {
               geometry: {
                 type: "LineString",
                 coordinates: [
-                  [3.49, 6.43],
-                  [3.57, 6.48],
-                  [3.64, 6.54],
+                  [-0.19, 5.6],
+                  [-0.13, 5.63],
+                  [-0.07, 5.67],
                 ],
               },
             },
@@ -101,11 +101,11 @@ export function StaticRoutePreview({ fallback = false }: { fallback?: boolean })
     <div
       className="route-map"
       role="img"
-      aria-label="Static simulated route from Lekki to fictional micro-hub"
+      aria-label="Static simulated route from Accra to fictional micro-hub"
     >
       <div className="map-grid" />
       <div className="route-path">
-        <span className="map-node start">Lekki</span>
+        <span className="map-node start">Accra</span>
         <span className="map-node mid">Waypoint</span>
         <span className="map-node end">Micro-hub</span>
       </div>

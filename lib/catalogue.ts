@@ -19,7 +19,8 @@ export function parseCatalogueQuery(
 
   const origin = single(params.origin);
   return {
-    market: single(params.market) === "GH" ? "GH" : "NG",
+    // Ghana is the pilot market, so it is where the shop lands by default.
+    market: single(params.market) === "NG" ? "NG" : "GH",
     categories: list(params.category),
     origin:
       origin === "ghana_origin_export" || origin === "direct_import"

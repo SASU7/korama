@@ -24,7 +24,7 @@ there and picks it up at first sign-in.
 
 The canonical presenter flow is:
 
-1. Shop → Nigeria → open a product → Add to cart. Add a second product to
+1. Shop → Ghana → open a product → Add to cart. Add a second product to
    show a multi-line order, then Cart → Checkout → Paystack test payment.
 2. Switch guided identity to `Warehouse + compliance`, then Operations → Allocate → Confirm pick → Confirm pack → Dispatch. Packing creates the shipment and dispatch starts its simulated delivery leg.
 3. Compliance → show the evidence chain and `DEMO — NOT A VALID CERTIFICATE`.

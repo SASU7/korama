@@ -126,7 +126,7 @@ export default async function ProductPage({
             <Alert>
               <AlertDescription>
                 {market?.name ?? "This market"} is catalogue-only. Checkout is
-                available for Nigerian delivery addresses.
+                available for Ghanaian delivery addresses.
               </AlertDescription>
             </Alert>
           ) : (
