@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { badRequest, notFound } from "@/lib/errors";
 import { buildTelemetry, calculateQuote, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
 import { adminClient } from "@/lib/supabase/admin-client";
@@ -405,9 +406,9 @@ function resolveNigerianLines(context: NormalizedContext, cart: CartLine[]) {
         (productId(candidate) === line.productId || candidate.product.id === line.productId),
     );
     if (!item || !item.listing.purchasable)
-      throw new Error(`Line ${index + 1}: this listing is not purchasable in Nigeria`);
+      throw badRequest(`Line ${index + 1}: this listing is not purchasable in Nigeria`);
     const product = context.products.find((candidate) => candidate.id === productId(item));
-    if (!product) throw new Error(`Line ${index + 1}: the product was not found`);
+    if (!product) throw badRequest(`Line ${index + 1}: the product was not found`);
     return { item, product, quantity: line.quantity };
   });
 }
@@ -476,17 +477,17 @@ export async function normalizedVerifyPayment(orderId: string, providerReference
 
 export async function normalizedAllocate(reference: string) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Order not found in operator scope");
+  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
   return context.repository.allocateOrderFefo(reference);
 }
 export async function normalizedAdvance(reference: string, status: Extract<OrderStatus, "picked" | "packed" | "dispatched">, weightGrams?: number) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Order not found in operator scope");
+  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
   return context.repository.advanceOrder(reference, status, weightGrams);
 }
 export async function normalizedCommand(reference: string, command: string) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Shipment not found in safety scope");
+  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
 }
 

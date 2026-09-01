@@ -1,0 +1,33 @@
+# The initialize route answered 400 for every checkout because the production
+# PAYSTACK_SECRET_KEY was not a test key. /api/health reports exactly that, and
+# scripts/deployment-smoke.mjs reads it — nothing was running it. This does.
+name: Deployment smoke
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-smoke-${{ github.event.deployment_status.target_url }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # deployment_status fires on every transition; only a live deployment is
+    # worth probing.
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm deployment:check
+        env:
+          KORAMA_DEPLOYMENT_URL: ${{ github.event.deployment_status.target_url }}

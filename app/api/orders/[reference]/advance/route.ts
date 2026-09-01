@@ -1,5 +1,6 @@
 import { apiError, jsonBody } from "@/lib/api";
 import { requireAuth, trustedRequestOrigin } from "@/lib/auth";
+import { badRequest, notFound } from "@/lib/errors";
 import {
   getIdempotentResponse,
   recordAudit,
@@ -28,14 +29,14 @@ export async function POST(
     const body = await jsonBody(request);
     const next = String(body.status);
     if (!(next === "picked" || next === "packed" || next === "dispatched"))
-      throw new Error("Unsupported order transition");
+      throw badRequest("Unsupported order transition");
     await normalizedAdvance(reference, next);
     const normalized = await readNormalizedOrder(
       reference,
       undefined,
       "warehouse_operator",
     );
-    if (!normalized?.state.order) throw new Error("Order not found");
+    if (!normalized?.state.order) throw notFound("Order not found");
     const responseBody = {
       order: normalized.state.order,
       events: normalized.state.orderEvents,
