@@ -9,6 +9,7 @@ import {
   PackagePlus,
   Plane,
   ShoppingBag,
+  UserCog,
   Warehouse,
 } from "lucide-react";
 import { useTransition } from "react";
@@ -117,14 +118,24 @@ export function WorkspaceSidebar({
                 </SidebarMenuButton>
               </SidebarMenuItem>
               {roles.includes("administrator") && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="Catalogue admin">
-                    <Link href="/admin/products">
-                      <PackagePlus aria-hidden />
-                      <span>Catalogue</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild tooltip="Catalogue admin">
+                      <Link href="/admin/products">
+                        <PackagePlus aria-hidden />
+                        <span>Catalogue</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild tooltip="People and roles">
+                      <Link href="/admin/users">
+                        <UserCog aria-hidden />
+                        <span>People</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </>
               )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Shop">

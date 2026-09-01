@@ -8,7 +8,7 @@ Production: [korama.vercel.app](https://korama.vercel.app)
 
 - Next.js 16 App Router on Vercel.
 - WILSHUB-Engine on Supabase (project ref **cmusntqsaatsxndltdxe**) is the only database in every environment.
-- Supabase Auth provides Google OAuth sessions. Every signed-in user receives the **consumer** role; internal roles come only from **role_assignments**.
+- Supabase Auth provides Google OAuth sessions. Every signed-in user receives the **consumer** role; internal roles come only from **role_assignments**. **administrator** is a superset role — it satisfies every other role check, in the app guards and in `private.has_role()` (so RLS and Realtime agree).
 - Server-only normalized Supabase repositories and RPCs own order, payment, inventory, fulfilment, and delivery mutations.
 - Paystack hosted Checkout runs in test mode. Paystack signs webhooks with **PAYSTACK_SECRET_KEY** using HMAC-SHA512.
 - Mapbox renders the delivery route when configured; the app keeps a static fallback.
@@ -26,6 +26,8 @@ There is no in-memory, snapshot, access-code, or local-Supabase runtime path.
 | /operations | warehouse_operator | FEFO allocation and fulfilment |
 | /compliance | warehouse_operator | Origin evidence and certificate preview |
 | /delivery | safety_officer | Preflight, telemetry, lockout, and fallback |
+| /admin/products | administrator | Catalogue: create, edit, and photograph products |
+| /admin/users | administrator | People: assign roles and invite new Gmail accounts |
 | /api/health | Public, secret-free | Hosted dependency readiness |
 
 ## Environment
@@ -66,7 +68,13 @@ Open **http://localhost:3000/shop**. Only the frontend runs locally; all data co
 3. Add the client ID and secret to Supabase Authentication → Providers → Google and enable it.
 4. Keep the Supabase site URL at **https://korama.vercel.app** and allow **https://korama.vercel.app/auth/callback**.
 
-A consumer profile and role assignment are created after the first successful callback. Add **warehouse_operator** or **safety_officer** in **public.role_assignments** only for approved internal users.
+A consumer profile and role assignment are created after the first successful callback.
+
+Internal roles are handed out from **/admin/users**, not from psql. An administrator can tick roles on any existing account, or assign a role to a **@gmail.com** address that has never signed in — that intent is held in **public.pending_role_assignments** and applied by the OAuth callback the first time the person arrives. Only gmail.com is accepted for now, because sign-in is Google OAuth.
+
+The default administrator is **nanasasu7@gmail.com**, bootstrapped by migration **20260901160000_administrator_full_access_and_invites.sql** whether or not that account has signed in yet. `pnpm admin:grant <email>` remains the break-glass path if nobody can reach the page.
+
+Two lockouts are refused by the server, not just hidden in the UI: removing your own administrator role, and removing the last administrator.
 
 ### Paystack
 
@@ -121,6 +129,7 @@ pnpm dlx vercel@latest deploy . --prod -y
 - **app/** — routes, Auth callbacks, account pages, and API handlers.
 - **components/PrototypeWorkspace.tsx** — shared shop, markets, operations, compliance, and delivery workspace.
 - **lib/auth.ts** — Supabase user context and database-backed role authorization.
+- **lib/supabase/role-admin.ts** — service-role reads and writes behind the People screen.
 - **lib/domain.ts** — quote, FEFO, fulfilment, and safety rules.
 - **lib/supabase/normalized-repository.ts** — typed reads and RPC calls.
 - **lib/supabase/normalized-adapter.ts** — application view projection over normalized data.
@@ -142,6 +151,7 @@ Prices, duty treatment, provenance evidence, aviation records, and operational e
 | `/checkout`, `/checkout/complete` | Focused checkout | Signed in |
 | `/operations`, `/compliance` | Staff console | `warehouse_operator` |
 | `/delivery` | Staff console | `safety_officer` |
+| `/admin/products`, `/admin/users` | Admin | `administrator` |
 | `/access-denied` | Storefront | Public |
 | `/auth/sign-in`, `/auth/callback` | — | Public |
 

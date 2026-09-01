@@ -16,6 +16,12 @@ pnpm dev
 Open `http://localhost:3000`. The shared access-code gate was removed in
 commit 589201f; sign-in is Google OAuth via Supabase.
 
+Sign in as `nanasasu7@gmail.com` — the default administrator — and every
+surface below is open without switching identity, because `administrator`
+satisfies every role check. Roles for anyone else are assigned from
+`/admin/users`; a Gmail address that has never signed in can be given a role
+there and picks it up at first sign-in.
+
 The canonical presenter flow is:
 
 1. Shop → Nigeria → open a product → Add to cart. Add a second product to

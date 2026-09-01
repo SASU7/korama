@@ -1,0 +1,77 @@
+Korama catalogue image credits
+Generated: 2026-09-01
+Generator: OpenAI built-in image generation tool
+
+These are synthetic, illustrative catalogue photographs created for the Korama
+investor prototype. They are not official supplier photography and should not
+be treated as an exact representation of branded packaging.
+
+Shared generation brief
+-----------------------
+Use case: product-mockup.
+Asset type: Korama ecommerce catalogue product photograph, portrait 4:5.
+Scene: seamless warm-ivory plaster surface and softly textured background.
+Style: photorealistic, natural high-end ecommerce photography with realistic
+materials and subtle organic imperfections.
+Composition: centred subject, generous even padding, complete object visible,
+safe for a 4:5 crop.
+Lighting: soft diffused window daylight with restrained shadows.
+Constraints: no brand names, logos, labels, readable text, people, hands,
+watermarks, borders, or unrelated decorative props.
+
+Final subject prompts
+---------------------
+
+nk-shea-balm.webp
+An open 180 g amber-glass jar containing pale golden shea repair balm, with its
+plain matte dark lid beside it; slight three-quarter eye-level view; realistic
+glass and handmade balm swirls.
+
+nk-shea-oil.webp
+A slim 220 ml amber-glass pump bottle filled with translucent golden daily body
+oil; plain matte-black pump; slight three-quarter eye-level view.
+
+aw-kente-tote.webp
+A structured natural-tan handwoven market tote with sturdy handles and one
+narrow Ghanaian kente-style geometric strip in restrained rust, gold, green,
+and indigo; authentic weave and small artisanal variations.
+
+af-cocoa-granola.webp
+An unlabelled resealable kraft pouch behind a cream ceramic bowl containing
+realistic toasted oats, cocoa nibs, coconut flakes, and small golden clusters;
+wholesome, restrained food styling.
+
+tb-bolga-basket.webp
+A large round Ghanaian elephant-grass Bolga storage basket with an open top,
+natural straw body, subtle rust and black woven bands, and two short
+dark-brown leather-wrapped handles; front-on three-quarter view.
+
+vcw-cocoa-powder.webp
+An open wide amber-glass jar filled with fine dark cocoa powder, with a plain
+wooden scoop beside it holding a modest mound; no cocoa beans or scattered
+powder.
+
+di-ng-blender.webp
+A compact unbranded countertop blender with an empty clear-glass jar, brushed
+stainless-steel base, plain black dial, and black lid; realistic appliance
+proportions; no cord or food.
+
+di-ng-scarf.webp
+One warm-oatmeal flax-linen travel scarf, neatly folded with one end gently
+draped and short natural fringe visible; shallow overhead view; realistic weave
+and soft creases.
+
+di-gh-lamp.webp
+One compact table lamp with a cylindrical natural-rattan shade and small dark
+walnut base, switched on; daylight balanced with a gentle warm glow through the
+weave; no cord or furniture.
+
+future-marketplace.webp
+An intentionally provisional editorial still life representing a future maker
+marketplace: an unfinished clay vessel, a neutral handwoven textile sample, and
+an abstract raw-wood form on low plaster plinths; no finished retail packaging.
+
+Final delivery format
+---------------------
+Each selected render was resized to 1200 x 1500 pixels and encoded as an sRGB
+WebP under 180,000 bytes. No third-party photographs or trademarks were used.

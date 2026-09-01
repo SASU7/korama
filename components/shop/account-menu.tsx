@@ -73,9 +73,14 @@ export function AccountMenu({
           <Link href="/account/orders">Your orders</Link>
         </DropdownMenuItem>
         {roles.includes("administrator") && (
-          <DropdownMenuItem asChild>
-            <Link href="/admin/products">Manage catalogue</Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/products">Manage catalogue</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/users">Manage people</Link>
+            </DropdownMenuItem>
+          </>
         )}
         {staffRoles.length > 0 && (
           <>

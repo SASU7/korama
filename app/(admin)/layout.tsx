@@ -3,13 +3,14 @@ import { Wordmark } from "@/components/shared/brand";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { requireAdministrator } from "@/lib/auth-guards-admin";
+import { ADMIN_NAV } from "@/lib/navigation";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Catalogue administration. Its own group, so neither the storefront shell nor
- * the staff console wraps it, and comfortable density because these are forms
- * rather than work queues.
+ * Administration: the catalogue, and who may do what. Its own group, so
+ * neither the storefront shell nor the staff console wraps it, and comfortable
+ * density because these are forms rather than work queues.
  */
 export default async function AdminLayout({
   children,
@@ -23,14 +24,17 @@ export default async function AdminLayout({
       <header className="bg-background/95 sticky top-0 z-40 border-b backdrop-blur">
         <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-3 px-(--gutter)">
           <Wordmark href="/admin/products" />
-          <Badge variant="outline">Catalogue admin</Badge>
+          <Badge variant="outline">Admin</Badge>
           <nav className="ml-4 hidden gap-1 sm:flex">
-            <Link
-              href="/admin/products"
-              className="text-muted-foreground hover:text-foreground rounded-md px-3 py-1.5 text-sm"
-            >
-              Products
-            </Link>
+            {ADMIN_NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="text-muted-foreground hover:text-foreground rounded-md px-3 py-1.5 text-sm"
+              >
+                {item.label}
+              </Link>
+            ))}
             <Link
               href="/shop"
               className="text-muted-foreground hover:text-foreground rounded-md px-3 py-1.5 text-sm"

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import type { UserRole } from "@/lib/domain";
 import type { Database } from "@/lib/supabase/database.types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { applyPendingRoleAssignments } from "@/lib/supabase/role-admin";
 export { trustedRequestOrigin } from "@/lib/request-security";
 
 export const ACTIVE_ROLE_COOKIE = "korama_active_role";
@@ -17,9 +18,26 @@ export const APP_ROLES = [
 
 export type AuthContext = {
   user: User;
+  /**
+   * Every role the account may act as. For an administrator this is all of
+   * APP_ROLES, not just the rows in role_assignments — see grantedRoles for
+   * what was actually assigned.
+   */
   roles: UserRole[];
+  /** Exactly the roles held in role_assignments. */
+  grantedRoles: UserRole[];
   activeRole: UserRole;
+  isAdministrator: boolean;
 };
+
+/**
+ * Administrator is a superset role: it satisfies every other role rather than
+ * sitting beside them. private.has_role() applies the same rule inside the
+ * database, so RLS and Realtime agree with these guards.
+ */
+export function effectiveRoles(granted: UserRole[]): UserRole[] {
+  return granted.includes("administrator") ? [...APP_ROLES] : granted;
+}
 
 function requiredEnv(
   name: "NEXT_PUBLIC_SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY",
@@ -58,16 +76,24 @@ export async function authContext(): Promise<AuthContext | null> {
   if (assignmentsError)
     throw new Error("Your account roles could not be loaded");
 
-  const roles = [
+  const grantedRoles = [
     ...new Set((assignments ?? []).map(({ role }) => role).filter(isAppRole)),
   ];
-  if (!roles.includes("consumer")) roles.unshift("consumer");
-  const requestedRole =
-    (await cookies()).get(ACTIVE_ROLE_COOKIE)?.value ?? "consumer";
-  const activeRole = roles.includes(requestedRole as UserRole)
-    ? (requestedRole as UserRole)
-    : "consumer";
-  return { user, roles, activeRole };
+  if (!grantedRoles.includes("consumer")) grantedRoles.unshift("consumer");
+  const isAdministrator = grantedRoles.includes("administrator");
+  const roles = effectiveRoles(grantedRoles);
+
+  // An administrator with no cookie lands on "administrator" rather than
+  // "consumer". The workspace reads its data as the active role, so defaulting
+  // an admin to consumer would render Operations and Delivery empty until they
+  // used the role switcher.
+  const defaultRole: UserRole = isAdministrator ? "administrator" : "consumer";
+  const requestedRole = (await cookies()).get(ACTIVE_ROLE_COOKIE)?.value;
+  const activeRole =
+    requestedRole && roles.includes(requestedRole as UserRole)
+      ? (requestedRole as UserRole)
+      : defaultRole;
+  return { user, roles, grantedRoles, activeRole, isAdministrator };
 }
 
 export async function requireAuth(allowedRoles?: UserRole[]) {
@@ -80,7 +106,13 @@ export async function requireAuth(allowedRoles?: UserRole[]) {
       ),
       context: null,
     };
-  if (allowedRoles && !allowedRoles.includes(context.activeRole)) {
+  // Administrators pass every role check whatever they are currently acting
+  // as, so a mutation never depends on them remembering to switch role first.
+  if (
+    allowedRoles &&
+    !allowedRoles.includes(context.activeRole) &&
+    !context.isAdministrator
+  ) {
     return {
       response: Response.json(
         { error: "Your assigned role cannot perform this action" },
@@ -118,4 +150,8 @@ export async function ensureConsumerProfile(user: User) {
       { onConflict: "profile_id,role" },
     );
   if (roleError) throw new Error(`Role setup failed: ${roleError.message}`);
+
+  // Roles an administrator invited before this account existed. Applied here,
+  // after the profile row, because role_assignments references profiles(id).
+  await applyPendingRoleAssignments(user.id, user.email);
 }
