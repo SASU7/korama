@@ -71,11 +71,13 @@ export function CheckoutForm({
   cart,
   quote,
   weightGrams,
+  destinationName,
 }: {
   email: string;
   cart: CartLine[];
   quote: Quote;
   weightGrams: number;
+  destinationName: string;
 }) {
   const [address, setAddress] = useState<DeliveryAddress>({
     recipientName: "",
@@ -186,7 +188,7 @@ export function CheckoutForm({
                   <span className="flex-1">
                     <span className="flex items-center gap-2 font-medium">
                       <Plane className="size-4" aria-hidden />
-                      Simulated drone · Accra micro-hub
+                      Simulated drone · {destinationName}
                     </span>
                     <span className="text-muted-foreground block text-(length:--text-meta)">
                       Parcel is {weightGrams} g, within the {DRONE_PAYLOAD_LIMIT_GRAMS} g payload limit.

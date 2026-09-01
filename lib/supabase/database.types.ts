@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -689,31 +669,70 @@ export type Database = {
         Row: {
           checkout_enabled: boolean
           created_at: string
+          delivery_destination_node_id: string | null
+          delivery_direct_import_minor: number
+          delivery_ghana_origin_minor: number
+          delivery_origin_node_id: string | null
+          fulfilment_site_id: string | null
           id: string
           language: string
           market_id: string
           operating_company_id: string
           tax_duty_status: string
+          tax_rate_basis_points: number
         }
         Insert: {
           checkout_enabled?: boolean
           created_at?: string
+          delivery_destination_node_id?: string | null
+          delivery_direct_import_minor: number
+          delivery_ghana_origin_minor: number
+          delivery_origin_node_id?: string | null
+          fulfilment_site_id?: string | null
           id?: string
           language: string
           market_id: string
           operating_company_id: string
           tax_duty_status: string
+          tax_rate_basis_points: number
         }
         Update: {
           checkout_enabled?: boolean
           created_at?: string
+          delivery_destination_node_id?: string | null
+          delivery_direct_import_minor?: number
+          delivery_ghana_origin_minor?: number
+          delivery_origin_node_id?: string | null
+          fulfilment_site_id?: string | null
           id?: string
           language?: string
           market_id?: string
           operating_company_id?: string
           tax_duty_status?: string
+          tax_rate_basis_points?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "market_configs_delivery_destination_node_id_fkey"
+            columns: ["delivery_destination_node_id"]
+            isOneToOne: false
+            referencedRelation: "ports_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_configs_delivery_origin_node_id_fkey"
+            columns: ["delivery_origin_node_id"]
+            isOneToOne: false
+            referencedRelation: "ports_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "market_configs_fulfilment_site_id_fkey"
+            columns: ["fulfilment_site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "market_configs_market_id_fkey"
             columns: ["market_id"]
@@ -1055,8 +1074,8 @@ export type Database = {
           created_at: string
           currency: string
           delivery_address_snapshot: Json
-          delivery_minor: number
           delivery_method: string
+          delivery_minor: number
           id: string
           market_id: string
           operating_company_id: string
@@ -1072,8 +1091,8 @@ export type Database = {
           created_at?: string
           currency: string
           delivery_address_snapshot?: Json
-          delivery_minor: number
           delivery_method?: string
+          delivery_minor: number
           id?: string
           market_id: string
           operating_company_id: string
@@ -1089,8 +1108,8 @@ export type Database = {
           created_at?: string
           currency?: string
           delivery_address_snapshot?: Json
-          delivery_minor?: number
           delivery_method?: string
+          delivery_minor?: number
           id?: string
           market_id?: string
           operating_company_id?: string
@@ -1739,9 +1758,9 @@ export type Database = {
         Row: {
           created_at: string
           detail: string
+          event_hash: string
           event_sequence: number
           id: string
-          event_hash: string
           operating_company_id: string
           previous_event_hash: string | null
           sortie_id: string
@@ -1750,9 +1769,9 @@ export type Database = {
         Insert: {
           created_at?: string
           detail: string
-          event_sequence?: number
+          event_hash: string
+          event_sequence: number
           id?: string
-          event_hash?: string
           operating_company_id: string
           previous_event_hash?: string | null
           sortie_id: string
@@ -1761,9 +1780,9 @@ export type Database = {
         Update: {
           created_at?: string
           detail?: string
+          event_hash?: string
           event_sequence?: number
           id?: string
-          event_hash?: string
           operating_company_id?: string
           previous_event_hash?: string | null
           sortie_id?: string
@@ -1791,8 +1810,8 @@ export type Database = {
           authorization_id: string | null
           created_at: string
           drone_id: string
-          id: string
           geofence_id: string | null
+          id: string
           operating_company_id: string
           reference: string
           shipment_id: string
@@ -1803,8 +1822,8 @@ export type Database = {
           authorization_id?: string | null
           created_at?: string
           drone_id: string
-          id?: string
           geofence_id?: string | null
+          id?: string
           operating_company_id: string
           reference: string
           shipment_id: string
@@ -1815,8 +1834,8 @@ export type Database = {
           authorization_id?: string | null
           created_at?: string
           drone_id?: string
-          id?: string
           geofence_id?: string | null
+          id?: string
           operating_company_id?: string
           reference?: string
           shipment_id?: string
@@ -1832,17 +1851,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "sorties_geofence_id_fkey"
-            columns: ["geofence_id"]
-            isOneToOne: false
-            referencedRelation: "geofences"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "sorties_drone_id_fkey"
             columns: ["drone_id"]
             isOneToOne: false
             referencedRelation: "drones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sorties_geofence_id_fkey"
+            columns: ["geofence_id"]
+            isOneToOne: false
+            referencedRelation: "geofences"
             referencedColumns: ["id"]
           },
           {
@@ -2427,9 +2446,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       inventory_class: [

@@ -33,6 +33,7 @@ import { RoleSwitcher } from "@/components/shared/role-switcher";
 import { Button } from "@/components/ui/button";
 import { WORKSPACE_NAV, type WorkspaceSurface } from "@/lib/navigation";
 import type { UserRole } from "@/lib/domain";
+import { OperatingCompanySwitcher } from "@/components/workspace/operating-company-switcher";
 
 const ICONS: Record<WorkspaceSurface, typeof Warehouse> = {
   operations: Warehouse,
@@ -43,9 +44,15 @@ const ICONS: Record<WorkspaceSurface, typeof Warehouse> = {
 export function WorkspaceSidebar({
   roles,
   activeRole,
+  activeOperatingCompanyId,
+  isAdministrator,
+  fulfilmentSiteName,
 }: {
   roles: UserRole[];
   activeRole: UserRole;
+  activeOperatingCompanyId: string;
+  isAdministrator: boolean;
+  fulfilmentSiteName: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -64,7 +71,7 @@ export function WorkspaceSidebar({
             variant="outline"
             className="group-data-[collapsible=icon]:hidden"
           >
-            Accra
+            {fulfilmentSiteName.replace(/ (domestic )?warehouse$/i, "")}
           </Badge>
         </div>
       </SidebarHeader>
@@ -152,6 +159,11 @@ export function WorkspaceSidebar({
 
       {/* No marketing callout here. Staff chrome carries controls, not copy. */}
       <SidebarFooter className="border-t">
+        {isAdministrator && (
+          <div className="mb-2 group-data-[collapsible=icon]:hidden">
+            <OperatingCompanySwitcher activeOperatingCompanyId={activeOperatingCompanyId} />
+          </div>
+        )}
         <div className="flex items-center gap-1 group-data-[collapsible=icon]:hidden">
           <RoleSwitcher
             roles={roles}

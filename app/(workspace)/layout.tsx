@@ -28,14 +28,20 @@ export default async function WorkspaceLayout({
   children: React.ReactNode;
 }) {
   const auth = await requireStaff();
-  const state = await readNormalizedState(auth.user.id, auth.activeRole);
+  const state = await readNormalizedState(auth.user.id, auth.activeRole, auth.activeOperatingCompanyId);
   const sidebarOpen =
     (await cookies()).get("sidebar_state")?.value !== "false";
 
   return (
     <div data-density="compact">
       <SidebarProvider defaultOpen={sidebarOpen}>
-        <WorkspaceSidebar roles={auth.roles} activeRole={auth.activeRole} />
+        <WorkspaceSidebar
+          roles={auth.roles}
+          activeRole={auth.activeRole}
+          activeOperatingCompanyId={auth.activeOperatingCompanyId}
+          isAdministrator={auth.isAdministrator}
+          fulfilmentSiteName={state.marketRuntime.fulfilmentSiteName}
+        />
         <SidebarInset>
           <WorkspaceLiveProvider initialState={state} authenticated>
             <header className="bg-background/95 sticky top-0 z-30 flex h-12 items-center gap-2 border-b px-(--gutter) backdrop-blur">

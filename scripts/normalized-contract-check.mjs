@@ -17,7 +17,8 @@ if (!url || !key) {
   process.exit(0);
 }
 
-const repository = createNormalizedRepository(createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } }));
+const client = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+const repository = createNormalizedRepository(client);
 // Ghana is the pilot market and Nigeria is parked — see the 20260901180000
 // ghana_pilot migration. The assertions below are structural on purpose: the
 // previous version pinned batch and listing counts, and went stale the moment
@@ -51,6 +52,20 @@ assert.ok(
   "at least one pilot batch must be allocatable, or checkout cannot complete",
 );
 assert.equal(operations.sorties.length, 0, "sorties are created by an order journey, not by the seed");
+const { data: runtime, error: runtimeError } = await client.from("market_configs").select("*")
+  .eq("market_id", pilot[0].market.id).eq("operating_company_id", PILOT_OPERATING_COMPANY).single();
+assert.ifError(runtimeError);
+assert.equal(runtime.checkout_enabled, true);
+assert.equal(runtime.tax_rate_basis_points, 750);
+assert.equal(runtime.delivery_ghana_origin_minor, 4500);
+assert.equal(runtime.delivery_direct_import_minor, 5500);
+const { data: fulfilmentSite, error: siteError } = await client.from("sites").select("id,name,reference")
+  .eq("id", runtime.fulfilment_site_id).single();
+assert.ifError(siteError);
+assert.equal(fulfilmentSite.name, "Tema domestic warehouse");
+const cocoa = operations.batches.find((batch) => batch.reference === "GH-VCW-2409");
+const cocoaBalance = operations.balances.find((balance) => balance.batch_id === cocoa?.id && balance.site_id === runtime.fulfilment_site_id);
+assert.equal(cocoaBalance?.available_quantity, 31, "VCW-2409 should expose 31 allocatable Tema units");
 console.log(
   `normalized contract pass: ${pilot.length} ${PILOT_MARKET} listings (pilot), ` +
   `${parked.length} ${PARKED_MARKET} listings (parked), ` +

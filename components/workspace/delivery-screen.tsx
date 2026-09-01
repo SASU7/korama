@@ -18,7 +18,7 @@ import { useWorkspaceLive } from "@/components/workspace/workspace-live-provider
 
 export function DeliveryScreen() {
   const { state, run, busy, error, refresh, syncStatus } = useWorkspaceLive();
-  const { sortie, order, shipment } = state;
+  const { sortie, order, shipment, marketRuntime } = state;
   const hasSimulatedDroneLeg = shipment?.legs.some((leg) => leg.mode === "simulated_drone") ?? false;
 
   return (
@@ -28,8 +28,8 @@ export function DeliveryScreen() {
         title="Delivery"
         meta={
           shipment
-            ? `${shipment.reference} · Accra → fictional micro-hub`
-            : "Accra → fictional micro-hub"
+            ? `${shipment.reference} · ${marketRuntime.deliveryOriginNodeName} → ${marketRuntime.deliveryDestinationNodeName}`
+            : `${marketRuntime.deliveryOriginNodeName} → ${marketRuntime.deliveryDestinationNodeName}`
         }
         actions={
           <>
@@ -59,7 +59,7 @@ export function DeliveryScreen() {
           <div className="flex flex-col gap-(--gutter)">
             {hasSimulatedDroneLeg ? (
               <>
-                <RoutePreview />
+                <RoutePreview runtime={marketRuntime} />
                 <TelemetryStrip sortie={sortie} />
               </>
             ) : shipment ? (

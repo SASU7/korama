@@ -1,8 +1,9 @@
-import type { CartLine } from "@/lib/domain";
-import { MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY } from "@/lib/domain";
+import type { CartLine } from "./domain.ts";
+import { MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY } from "./domain.ts";
 
 export const CART_COOKIE = "korama_cart";
 export const CART_COOKIE_MAX_AGE = 60 * 60 * 8;
+export const CART_COOKIE_VERSION = 2;
 
 /**
  * Anonymous carts live in an httpOnly cookie because carts.profile_id is NOT
@@ -10,16 +11,24 @@ export const CART_COOKIE_MAX_AGE = 60 * 60 * 8;
  * profile cart and is cleared.
  */
 export function serializeCart(lines: CartLine[]) {
-  return JSON.stringify(lines.map((line) => [line.productId, line.quantity]));
+  return JSON.stringify({
+    version: CART_COOKIE_VERSION,
+    market: "GH",
+    lines: lines.map((line) => [line.productId, line.quantity]),
+  });
 }
 
 export function parseCart(value: string | undefined): CartLine[] {
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    const payload = parsed as { version?: unknown; market?: unknown; lines?: unknown };
+    // Deliberately reject the old anonymous NGN array shape. A stale cart can
+    // be browsed again, but it may never cross into Ghana checkout.
+    if (payload.version !== CART_COOKIE_VERSION || payload.market !== "GH" || !Array.isArray(payload.lines)) return [];
     const lines: CartLine[] = [];
-    for (const entry of parsed.slice(0, MAX_CART_LINES)) {
+    for (const entry of payload.lines.slice(0, MAX_CART_LINES)) {
       if (!Array.isArray(entry)) continue;
       const productId = String(entry[0] ?? "").trim();
       const quantity = Number(entry[1]);

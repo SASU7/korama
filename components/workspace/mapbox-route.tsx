@@ -3,6 +3,7 @@
 import "mapbox-gl/dist/mapbox-gl.css";
 
 import { useEffect, useRef, useState } from "react";
+import type { MarketRuntimeConfig } from "@/lib/domain";
 
 /**
  * Mapbox route preview, lifted out of the legacy workspace component
@@ -14,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
  * unlayered, so it correctly beats Tailwind Preflight (which would otherwise
  * strip the map controls' chrome), and it now loads only on this surface.
  */
-export function MapboxRoutePreview() {
+export function MapboxRoutePreview({ runtime }: { runtime: MarketRuntimeConfig }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -31,8 +32,8 @@ export function MapboxRoutePreview() {
         map = new mapboxgl.Map({
           container: containerRef.current,
           style: "mapbox://styles/mapbox/light-v11",
-          center: [-0.13, 5.63],
-          zoom: 10,
+          center: runtime.routeCoordinates[1] ?? runtime.routeCoordinates[0] ?? [-0.0166, 5.6698],
+          zoom: 12,
           attributionControl: true,
         });
         map.on("error", () => {
@@ -47,11 +48,7 @@ export function MapboxRoutePreview() {
               properties: {},
               geometry: {
                 type: "LineString",
-                coordinates: [
-                  [-0.19, 5.6],
-                  [-0.13, 5.63],
-                  [-0.07, 5.67],
-                ],
+                coordinates: runtime.routeCoordinates,
               },
             },
           });
@@ -75,9 +72,9 @@ export function MapboxRoutePreview() {
       disposed = true;
       map?.remove();
     };
-  }, [token]);
+  }, [runtime, token]);
 
-  if (!token || mapError) return <StaticRoutePreview fallback={mapError} />;
+  if (!token || mapError) return <StaticRoutePreview runtime={runtime} fallback={mapError} />;
   return (
     <div
       className="route-map mapbox-route"
@@ -96,18 +93,18 @@ export function MapboxRoutePreview() {
   );
 }
 
-export function StaticRoutePreview({ fallback = false }: { fallback?: boolean }) {
+export function StaticRoutePreview({ runtime, fallback = false }: { runtime: MarketRuntimeConfig; fallback?: boolean }) {
   return (
     <div
       className="route-map"
       role="img"
-      aria-label="Static simulated route from Accra to fictional micro-hub"
+      aria-label={`Static simulated route from ${runtime.deliveryOriginNodeName} to ${runtime.deliveryDestinationNodeName}`}
     >
       <div className="map-grid" />
       <div className="route-path">
-        <span className="map-node start">Accra</span>
+        <span className="map-node start">Tema warehouse</span>
         <span className="map-node mid">Waypoint</span>
-        <span className="map-node end">Micro-hub</span>
+        <span className="map-node end">Tema micro-hub</span>
       </div>
       <div className="map-caption">
         <span>Route data is simulated</span>

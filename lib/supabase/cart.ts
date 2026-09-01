@@ -25,6 +25,8 @@ async function openCartId(profileId: string) {
     .from("carts")
     .select("id")
     .eq("profile_id", profileId)
+    .eq("market_id", GHANA_MARKET_ID)
+    .eq("operating_company_id", GHANA_OPERATING_COMPANY_ID)
     .eq("status", "open")
     .maybeSingle();
   if (existing) return existing.id;

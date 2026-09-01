@@ -28,11 +28,13 @@ export async function POST(
     const { reference } = await params;
     const body = await jsonBody(request);
     const command = String(body.command);
-    await normalizedCommand(reference, command);
+    const operatingCompanyId = auth.context.activeOperatingCompanyId;
+    await normalizedCommand(reference, command, operatingCompanyId);
     const normalized = await readNormalizedOrder(
       reference,
       undefined,
       "safety_officer",
+      operatingCompanyId,
     );
     if (!normalized?.state.order) throw notFound("Shipment not found");
     const responseBody = {

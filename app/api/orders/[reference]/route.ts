@@ -12,6 +12,7 @@ export async function GET(
     reference,
     auth.context.user.id,
     auth.context.activeRole,
+    auth.context.activeRole === "consumer" ? undefined : auth.context.activeOperatingCompanyId,
   );
   return normalized
     ? Response.json(

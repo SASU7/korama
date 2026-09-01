@@ -30,11 +30,13 @@ export async function POST(
     const next = String(body.status);
     if (!(next === "picked" || next === "packed" || next === "dispatched"))
       throw badRequest("Unsupported order transition");
-    await normalizedAdvance(reference, next);
+    const operatingCompanyId = auth.context.activeOperatingCompanyId;
+    await normalizedAdvance(reference, next, operatingCompanyId);
     const normalized = await readNormalizedOrder(
       reference,
       undefined,
       "warehouse_operator",
+      operatingCompanyId,
     );
     if (!normalized?.state.order) throw notFound("Order not found");
     const responseBody = {
