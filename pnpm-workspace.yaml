@@ -1,5 +1,10 @@
-packages:
-  - .
-
+# Settings only — do NOT re-add a `packages:` key.
+#
+# `packages: [.]` globs to the repo root, which has both package.json and
+# next.config.ts, so the shadcn CLI's isMonorepoRoot/getWorkspaceTargets check
+# registers "." as a workspace target and `shadcn info` exits with
+# {"error":"monorepo_root"}. `-c .` re-resolves to the same cwd and fails too.
+# pnpm treats `packages` as optional (assertValidWorkspaceManifestPackages
+# returns early when absent) and the lockfile already keys the importer as ".".
 minimumReleaseAge: 10080
 trustPolicy: no-downgrade
