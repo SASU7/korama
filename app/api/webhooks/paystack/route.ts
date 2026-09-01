@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { validatedBusinessReference } from "@/lib/api";
+import { apiError, validatedBusinessReference } from "@/lib/api";
+import { badRequest, notFound } from "@/lib/errors";
 import { recordAudit } from "@/lib/persistence";
 import { paystackSecret } from "@/lib/paystack";
 import {
@@ -47,9 +48,9 @@ export async function POST(request: Request) {
       .trim()
       .toUpperCase();
     if (!Number.isFinite(amount) || !currency)
-      throw new Error("Paystack event is missing amount or currency");
+      throw badRequest("Paystack event is missing amount or currency");
     const current = await readNormalizedOrder(orderReference);
-    if (!current?.state.order) throw new Error("Order not found");
+    if (!current?.state.order) throw notFound("Order not found");
     const result = await normalizedVerifyPayment(
       current.view.order.id,
       reference,
@@ -66,11 +67,12 @@ export async function POST(request: Request) {
       received: true,
       idempotent: objectValue(result, "idempotent") === true,
     });
-  } catch {
-    return Response.json(
-      { error: "Webhook rejected" },
-      { status: 400, headers: { "cache-control": "no-store" } },
-    );
+  } catch (error) {
+    // Every failure used to answer 400 with nothing logged, so Paystack gave up
+    // retrying and left no trace of why. apiError logs the cause and answers
+    // 4xx only for an event that can never succeed — our own faults return 5xx,
+    // which Paystack retries.
+    return apiError(error, request);
   }
 }
 
