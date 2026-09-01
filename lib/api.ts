@@ -30,6 +30,8 @@ export function apiError(error: unknown, request?: Request) {
   const message = production
     ? "The request could not be completed"
     : detail;
-  console.error(JSON.stringify({ event: "api_error", requestId, method: request?.method, path: request ? new URL(request.url).pathname : undefined, message: production ? "request_failed" : detail }));
+  // The response is masked in production; the log is not. Swallowing the
+  // detail here leaves a 400 with no recoverable cause anywhere.
+  console.error(JSON.stringify({ event: "api_error", requestId, method: request?.method, path: request ? new URL(request.url).pathname : undefined, message: detail, stack: error instanceof Error ? error.stack : undefined }));
   return Response.json({ error: message, requestId }, { status: 400, headers: { "x-request-id": requestId, "cache-control": "no-store" } });
 }
