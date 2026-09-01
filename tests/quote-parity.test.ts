@@ -24,7 +24,7 @@ import {
   TAX_RATE,
 } from "../lib/domain.ts";
 
-/** Seeded NGN prices, for readability in the expectations below. */
+/** Seeded cedi prices, for readability in the expectations below. */
 const PRICE = { "shea-balm": 485000, "shea-oil": 620000, "direct-scarf": 730000 };
 
 export const PARITY_CASES = [

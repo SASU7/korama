@@ -44,7 +44,7 @@ export default async function CartPage() {
         <EmptyState
           icon={ShoppingBag}
           title="Your cart is empty"
-          description={`${state.products.filter((p) => p.market === "NG" && p.purchasable).length} products are available for delivery in Nigeria.`}
+          description={`${state.products.filter((p) => p.market === "GH" && p.purchasable).length} products are available for delivery in Ghana.`}
           action={
             <Button asChild>
               <Link href="/shop">Browse the shop</Link>

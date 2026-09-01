@@ -77,7 +77,7 @@ export async function readAdminProduct(id: string): Promise<ProductDraft | null>
     weightGrams: product.weight_grams,
     ingredients: String(attributes.ingredients ?? ""),
     transformation: String(attributes.transformation ?? ""),
-    marketCode: marketCode === "GH" ? "GH" : "NG",
+    marketCode: marketCode === "NG" ? "NG" : "GH",
     priceMinor: listing?.price_minor ?? 0,
     purchasable: listing?.purchasable ?? true,
     variantName: variant?.name ?? "",

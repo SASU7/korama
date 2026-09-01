@@ -3,7 +3,8 @@ import "server-only";
 import { createSupabaseAdminClient } from "@/lib/auth";
 import { badRequest, conflict } from "@/lib/errors";
 
-const NIGERIA_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000002";
+/** Audit events belong to the pilot company: Ghana, while Nigeria is parked. */
+const PILOT_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000001";
 
 function normalizeIdempotencyKey(value: string | null) {
   const key = value?.trim() ?? "";
@@ -66,7 +67,7 @@ export async function recordAudit(
     .from("audit_events")
     .insert({
       actor_id: actorId ?? null,
-      operating_company_id: NIGERIA_OPERATING_COMPANY_ID,
+      operating_company_id: PILOT_OPERATING_COMPANY_ID,
       action,
       entity_type: entityType,
       entity_id: null,

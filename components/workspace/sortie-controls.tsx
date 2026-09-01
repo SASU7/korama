@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CloudRain, PackageCheck, Plane, Sun, Truck } from "lucide-react";
+import { ArrowRight, CloudRain, OctagonX, PackageCheck, Plane, Sun, Truck } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,10 +40,11 @@ export function SortieControls({
   run: Run;
   busy: boolean;
 }) {
-  const { sortie, order } = state;
+  const { sortie, order, shipment } = state;
   const reference = order?.reference;
   const ready = order?.status === "dispatched";
-  if (!reference) return null;
+  const hasSimulatedDroneLeg = shipment?.legs.some((leg) => leg.mode === "simulated_drone");
+  if (!reference || !hasSimulatedDroneLeg) return null;
 
   const allGatesPass = sortie.gates.every((gate) => gate.passed);
 
@@ -85,6 +86,20 @@ export function SortieControls({
         </Button>
       )}
 
+      {sortie.status === "launched" && (
+        <Button
+          className="w-full"
+          disabled={busy || !ready}
+          aria-busy={busy}
+          onClick={() =>
+            void run(...command(reference, "advance"), "Simulated telemetry advanced along the route.")
+          }
+        >
+          Advance simulated telemetry
+          <ArrowRight className="size-4" aria-hidden />
+        </Button>
+      )}
+
       {sortie.status === "en_route" && (
         <Button
           className="w-full"
@@ -106,6 +121,22 @@ export function SortieControls({
             Ground-courier fallback — {sortie.fallbackReason}
           </AlertDescription>
         </Alert>
+      )}
+      {["cleared", "launched", "en_route"].includes(sortie.status) && (
+        <Button
+          variant="destructive"
+          className="w-full"
+          disabled={busy}
+          onClick={() =>
+            void run(
+              ...command(reference, "abort"),
+              "Simulated sortie aborted. A ground-courier fallback was created.",
+            )
+          }
+        >
+          <OctagonX className="size-4" aria-hidden />
+          Abort sortie + use courier
+        </Button>
       )}
 
       <Collapsible>

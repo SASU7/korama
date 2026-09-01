@@ -236,9 +236,9 @@ export function ProductForm({
               <Field
                 id="marketCode"
                 label="Market"
-                hint="Checkout is Nigeria only; Ghana listings are catalogue-only."
+                hint="Checkout is Ghana only; Nigeria listings are catalogue-only while it is parked."
               >
-                <Select name="marketCode" defaultValue={draft?.marketCode ?? "NG"}>
+                <Select name="marketCode" defaultValue={draft?.marketCode ?? "GH"}>
                   <SelectTrigger id="marketCode">
                     <SelectValue />
                   </SelectTrigger>

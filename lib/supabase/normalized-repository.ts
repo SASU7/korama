@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
-import type { OrderStatus } from "../domain";
+import type { DeliveryMethod, OrderStatus } from "../domain";
 
 type Client = SupabaseClient<Database>;
 type TableName = keyof Database["public"]["Tables"];
@@ -29,8 +29,9 @@ export type NormalizedCreateOrderInput = {
     recipientName: string;
     addressLine: string;
     city: string;
-    countryCode: "NG";
+    countryCode: "GH";
   };
+  deliveryMethod: DeliveryMethod;
 };
 
 export type NormalizedAllocation = {
@@ -256,6 +257,7 @@ export function createNormalizedRepository(client: Client) {
         p_market_id: input.marketId,
         p_lines: input.lines,
         p_delivery_address: input.deliveryAddress,
+        p_delivery_method: input.deliveryMethod,
       }));
     },
 

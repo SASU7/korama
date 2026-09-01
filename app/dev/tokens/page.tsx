@@ -95,16 +95,16 @@ function TypeScale() {
       </p>
       <p className="text-(length:--text-body)">
         Body — Instrument Sans 400. Nokware shea repair balm, blended and
-        batch-tested in Accra, pre-positioned at Lekki.
+        batch-tested and pre-positioned in Accra.
       </p>
       <p className="font-display text-[1rem] font-medium tracking-[-0.005em]">
         Product name — Fraunces 500
       </p>
       <p className="text-(length:--text-meta) text-muted-foreground">
-        Meta — 8 products · Nigeria · prices in NGN
+        Meta — 8 products · Ghana · prices in GHS
       </p>
       <p className="flex gap-4">
-        <Money minor={485000} currency="NGN" className="text-[1rem]" />
+        <Money minor={485000} currency="GHS" className="text-[1rem]" />
         <Identifier value="NK-SB-2407" />
         <Identifier value="KOR-NG-1756402891-8a3f21bc" />
       </p>
@@ -143,7 +143,7 @@ function DataTable() {
                 </TableCell>
                 <TableCell data-numeric>{r.qty}</TableCell>
                 <TableCell data-numeric>
-                  <Money minor={r.minor} currency="NGN" />
+                  <Money minor={r.minor} currency="GHS" />
                 </TableCell>
               </TableRow>
             )),
@@ -193,7 +193,7 @@ export default function TokensPage() {
         <EmptyState
           icon={PackageSearch}
           title="No products match these filters"
-          description="Nigeria has 8 listings. Clear the category filter or search again."
+          description="Ghana has 8 listings. Clear the category filter or search again."
           action={<Button variant="outline">Clear filters</Button>}
         />
       </section>

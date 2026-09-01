@@ -92,7 +92,7 @@ export function PaymentVerification({ reference }: { reference: string }) {
               "This usually takes a few seconds."}
             {state === "confirmed" && (
               <>
-                Order <Identifier value={target} /> is with the Lekki warehouse.
+                Order <Identifier value={target} /> is with the Accra warehouse.
               </>
             )}
             {state === "pending" &&

@@ -34,9 +34,10 @@ export async function POST(request: Request) {
         ]);
     const { state } = await normalizedCreateOrder(
       auth.context.user.id,
-      `KOR-NG-${Date.now()}-${randomUUID().slice(0, 8)}`,
+      `KOR-GH-${Date.now()}-${randomUUID().slice(0, 8)}`,
       cart,
       validateDeliveryAddress(body.address),
+      body.deliveryMethod,
     );
     if (!state.order) throw new Error("Order creation returned no order");
     const callbackUrl = new URL("/checkout/complete", request.url).toString();

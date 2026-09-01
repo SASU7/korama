@@ -64,7 +64,7 @@ export function WorkspaceSidebar({
             variant="outline"
             className="group-data-[collapsible=icon]:hidden"
           >
-            Lekki
+            Accra
           </Badge>
         </div>
       </SidebarHeader>

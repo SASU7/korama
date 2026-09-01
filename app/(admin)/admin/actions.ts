@@ -45,7 +45,7 @@ function draftFrom(form: FormData): ProductDraft {
     weightGrams: weight,
     ingredients: text(form, "ingredients"),
     transformation: text(form, "transformation"),
-    marketCode: text(form, "marketCode") === "GH" ? "GH" : "NG",
+    marketCode: text(form, "marketCode") === "NG" ? "NG" : "GH",
     priceMinor: majorToMinor(text(form, "price")),
     purchasable: form.get("purchasable") === "on",
     variantName: text(form, "variantName"),

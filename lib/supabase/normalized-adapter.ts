@@ -1,10 +1,18 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { badRequest, notFound } from "@/lib/errors";
-import { buildTelemetry, calculateQuote, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
+import { buildTelemetry, calculateQuote, resolveDeliveryMethod, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type Batch, type BatchStatus, type CartLine, type ComplianceSnapshot, type DeliveryMethod, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
 import { adminClient } from "@/lib/supabase/admin-client";
 
+/**
+ * Ghana is the market that transacts. Paystack only supports GHS on this
+ * integration, so an NGN order can never be paid — see the 20260901180000
+ * ghana_pilot migration, which also disables checkout for Nigeria.
+ */
+export const GHANA_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000001";
+export const GHANA_MARKET_ID = "20000000-0000-0000-0000-000000000001";
+/** Parked: kept so the catalogue still reads, and so switching back is cheap. */
 export const NIGERIA_OPERATING_COMPANY_ID = "10000000-0000-0000-0000-000000000002";
 export const NIGERIA_MARKET_ID = "20000000-0000-0000-0000-000000000002";
 
@@ -113,7 +121,7 @@ function toProduct(item: NormalizedCatalogueItem, operations: NormalizedOperatio
     weightGrams: item.product.weight_grams,
     market: item.market.code === "GH" ? "GH" : "NG",
     purchasable: item.listing.purchasable,
-    stockLabel: `${item.market.code === "GH" ? "Tema" : "Lekki"} · ${available} units`,
+    stockLabel: `${item.market.code === "GH" ? "Accra" : "Lekki"} · ${available} units`,
     batch: firstBatch?.reference ?? "Not assigned",
     expiry: firstBatch?.expiry_date ?? "No expiry",
     ingredients: text(metadata.ingredients),
@@ -136,7 +144,7 @@ async function loadContext(): Promise<NormalizedContext> {
     repository.listCatalogue("NG"),
     repository.listCatalogue("GH"),
     repository.getOperationalSnapshot(NIGERIA_OPERATING_COMPANY_ID),
-    repository.getOperationalSnapshot("10000000-0000-0000-0000-000000000001"),
+    repository.getOperationalSnapshot(GHANA_OPERATING_COMPANY_ID),
   ]);
   const items = [...ngItems, ...ghItems];
   const products = [...new Map(items.map((item) => [item.product.id, toProduct(item, operations, ghanaOperations)])).values()];
@@ -162,7 +170,7 @@ function baseCompliance(context: NormalizedContext): ComplianceSnapshot {
 const eventLabels: Record<OrderStatus, { label: string; detail: string }> = {
   pending_payment: { label: "Order created", detail: "Awaiting server-confirmed Paystack test payment" },
   paid: { label: "Payment verified", detail: "Amount and currency match the server quote" },
-  allocated: { label: "Batch allocated", detail: "FEFO selected the earliest valid Lekki batch" },
+  allocated: { label: "Batch allocated", detail: "FEFO selected the earliest valid Accra batch" },
   picked: { label: "Picked", detail: "Warehouse operator confirms scan" },
   packed: { label: "Packed", detail: "Weight captured for delivery routing" },
   dispatched: { label: "Dispatched", detail: "Handover to simulated last-mile delivery" },
@@ -182,8 +190,8 @@ function toOrderEvents(events: Row<"order_events">[], status: OrderStatus): Orde
 function deliveryAddress(value: unknown): DeliveryAddress | undefined {
   const address = object(value);
   const countryCode = text(address.countryCode || address.country_code).toUpperCase();
-  if (!address.recipientName || !address.addressLine || !address.city || countryCode !== "NG") return undefined;
-  return { recipientName: text(address.recipientName), addressLine: text(address.addressLine), city: text(address.city), countryCode: "NG" };
+  if (!address.recipientName || !address.addressLine || !address.city || countryCode !== "GH") return undefined;
+  return { recipientName: text(address.recipientName), addressLine: text(address.addressLine), city: text(address.city), countryCode: "GH" };
 }
 
 function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot): Shipment | null {
@@ -191,8 +199,8 @@ function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot): 
   const legs: DeliveryLeg[] = view.deliveryLegs.filter((leg) => leg.mode !== "bulk_export").map((leg) => ({
     sequenceNo: leg.sequence_no,
     mode: leg.mode === "ground_courier" ? "ground_courier" : "simulated_drone",
-    origin: "Lekki warehouse",
-    destination: "Fictional Lekki micro-hub",
+    origin: "Accra warehouse",
+    destination: "Fictional Accra micro-hub",
     status: ["planned", "in_transit", "complete", "fallback"].includes(leg.status) ? leg.status as DeliveryLeg["status"] : "planned",
   }));
   return { reference: view.shipment.reference, status: view.shipment.status as Shipment["status"], legs, compliance };
@@ -200,25 +208,42 @@ function toShipment(view: NormalizedOrderView, compliance: ComplianceSnapshot): 
 
 function toSortie(view: NormalizedOrderView, context: NormalizedContext): Sortie {
   const row = view.sortie;
-  const drone = row ? context.operations.drones.find((candidate) => candidate.id === row.drone_id) : undefined;
-  const authorization = context.operations.authorizations.find((candidate) => candidate.status === "approved");
-  const geofence = context.operations.geofences.find((candidate) => candidate.status === "active");
+  const operational = view.order.operating_company_id === GHANA_OPERATING_COMPANY_ID
+    ? context.ghanaOperations
+    : context.operations;
+  const drone = row ? operational.drones.find((candidate) => candidate.id === row.drone_id) : undefined;
+  const now = Date.now();
+  const authorization = operational.authorizations.find((candidate) =>
+    candidate.id === row?.authorization_id || (
+      candidate.jurisdiction.trim().length > 0 &&
+      candidate.status === "approved" &&
+      new Date(candidate.valid_from).getTime() <= now &&
+      new Date(candidate.valid_until).getTime() >= now
+    ),
+  );
+  const geofence = operational.geofences.find((candidate) =>
+    candidate.id === row?.geofence_id || (
+      /-CORRIDOR$/.test(candidate.reference) &&
+      candidate.status === "active" &&
+      object(candidate.geometry).type === "LineString"
+    ),
+  );
   const weather = row?.weather_status === "unsafe" ? "unsafe" : "clear";
   const weight = view.shipment?.weight_grams ?? 180;
   const gates = [
     { key: "payload", label: "Payload", detail: `${weight}g / ${drone?.payload_limit_grams ?? 2000}g simulated limit`, passed: weight <= (drone?.payload_limit_grams ?? 2000) },
     { key: "aircraft", label: "Aircraft condition", detail: `${drone?.reference ?? "KOR-D01"} · airworthiness current`, passed: drone?.airworthiness_current ?? true },
-    { key: "authorization", label: "Authorization window", detail: "Simulated Nigerian authorization on file", passed: Boolean(authorization) },
+    { key: "authorization", label: "Authorization window", detail: authorization ? `${authorization.reference} · ${authorization.jurisdiction}` : "No route authorization bound", passed: Boolean(authorization) },
     { key: "weather", label: "Weather", detail: weather === "clear" ? "Wind and rain below the configured threshold" : "Unsafe weather injected · flight locked out", passed: weather === "clear", ...(weather === "unsafe" ? { severity: "danger" as const } : {}) },
-    { key: "geofence", label: "Geofence", detail: "Route avoids restricted corridors", passed: Boolean(geofence) },
+    { key: "geofence", label: "Geofence", detail: geofence ? `${geofence.reference} · active corridor` : "No route corridor bound", passed: Boolean(geofence) },
     { key: "battery", label: "Battery", detail: `${drone?.battery_percent ?? 94}% · reserve protected`, passed: (drone?.battery_percent ?? 94) >= 20 },
-    { key: "override", label: "Manual override", detail: "Safety officer control available", passed: true },
+    { key: "override", label: "Manual override", detail: drone?.manual_override_ready ? "Safety officer abort control available" : "Manual abort control is not ready", passed: drone?.manual_override_ready ?? false },
   ];
   const status = row?.status;
-  const allowed = ["draft", "preflight", "cleared", "launched", "en_route", "delivered", "lockout", "courier_fallback"].includes(status ?? "draft") ? status as Sortie["status"] : "draft";
+  const allowed = ["draft", "preflight", "cleared", "launched", "en_route", "delivered", "lockout", "abort", "return", "courier_fallback"].includes(status ?? "draft") ? status as Sortie["status"] : "draft";
   const telemetry = allowed === "launched" ? [buildTelemetry()[0]] : ["en_route", "delivered"].includes(allowed) ? buildTelemetry() : [];
   const latestEvent = view.sortieEvents.at(-1);
-  return { status: allowed, weather, telemetry, gates, fallbackReason: latestEvent?.status === "courier_fallback" || allowed === "lockout" ? latestEvent?.detail ?? "Unsafe weather automatically created a ground-courier leg" : undefined };
+  return { status: allowed, weather, telemetry, gates, fallbackReason: ["courier_fallback", "lockout", "abort", "return"].includes(allowed) ? latestEvent?.detail ?? "The simulated sortie stopped and a ground-courier leg was created" : undefined };
 }
 
 function taskState(view: NormalizedOrderView | null) {
@@ -307,8 +332,9 @@ function toState(context: NormalizedContext, view: NormalizedOrderView | null, r
     taxMinor: view.order.tax_minor,
     deliveryMinor: view.order.delivery_minor,
     totalMinor: view.order.total_minor,
-    currency: "NGN" as const,
+    currency: view.order.currency as "GHS" | "NGN",
     itemCount: orderLines.reduce((sum, l) => sum + l.quantity, 0),
+    deliveryMethod: view.order.delivery_method as DeliveryMethod,
     address: deliveryAddress(view.order.delivery_address_snapshot),
     compliance,
     paymentReference: view.paymentAttempts.find((attempt) => attempt.status === "paid")?.provider_reference,
@@ -363,7 +389,7 @@ function toBatch(batch: Row<"inventory_batches">, context: NormalizedContext, as
     productName: context.products.find(
       (product) => product.id === productIdFromUuid(context.items, batch.product_id),
     )?.name,
-    site: batch.operating_company_id === NIGERIA_OPERATING_COMPANY_ID ? "Lekki warehouse" : "Tema staging",
+    site: batch.operating_company_id === GHANA_OPERATING_COMPANY_ID ? "Accra warehouse" : "Lekki warehouse",
     expiry: batch.expiry_date ?? "No expiry",
     quantity: batch.quantity,
     allocated: batch.allocated,
@@ -383,30 +409,30 @@ export async function readNormalizedState(profileId?: string, role?: UserRole) {
   const context = await loadContext();
   const view = role === "consumer" && !profileId
     ? null
-    : await context.repository.getLatestOrderView(NIGERIA_OPERATING_COMPANY_ID, role === "consumer" ? profileId : undefined);
+    : await context.repository.getLatestOrderView(GHANA_OPERATING_COMPANY_ID, role === "consumer" ? profileId : undefined);
   return toState(context, view, role);
 }
 
 export async function readNormalizedOrder(reference: string, profileId?: string, role?: UserRole) {
   if (role === "consumer" && !profileId) return null;
   const context = await loadContext();
-  const view = await context.repository.getOrderView(reference, role === "consumer" ? profileId : undefined, NIGERIA_OPERATING_COMPANY_ID);
+  const view = await context.repository.getOrderView(reference, role === "consumer" ? profileId : undefined, GHANA_OPERATING_COMPANY_ID);
   return view ? { view, state: toState(context, view, role) } : null;
 }
 
 /**
- * Resolve catalogue slugs to purchasable Nigerian listings, with a per-line
+ * Resolve catalogue slugs to purchasable pilot-market listings, with a per-line
  * message so the caller can say which item is the problem.
  */
-function resolveNigerianLines(context: NormalizedContext, cart: CartLine[]) {
+function resolvePilotLines(context: NormalizedContext, cart: CartLine[]) {
   return cart.map((line, index) => {
     const item = context.items.find(
       (candidate) =>
-        candidate.market.code === "NG" &&
+        candidate.market.code === "GH" &&
         (productId(candidate) === line.productId || candidate.product.id === line.productId),
     );
     if (!item || !item.listing.purchasable)
-      throw badRequest(`Line ${index + 1}: this listing is not purchasable in Nigeria`);
+      throw badRequest(`Line ${index + 1}: this listing is not purchasable in Ghana`);
     const product = context.products.find((candidate) => candidate.id === productId(item));
     if (!product) throw badRequest(`Line ${index + 1}: the product was not found`);
     return { item, product, quantity: line.quantity };
@@ -419,7 +445,7 @@ function resolveNigerianLines(context: NormalizedContext, cart: CartLine[]) {
  */
 export async function normalizedQuote(cart: CartLine[]) {
   const context = await loadContext();
-  const resolved = resolveNigerianLines(context, cart);
+  const resolved = resolvePilotLines(context, cart);
   const state = { products: context.products } as DemoState;
   const quote = calculateQuote(
     state,
@@ -448,21 +474,28 @@ export async function normalizedCreateOrder(
   reference: string,
   cart: CartLine[],
   address: DeliveryAddress,
+  requestedDeliveryMethod: unknown,
 ) {
   const context = await loadContext();
-  const resolved = resolveNigerianLines(context, cart);
+  const resolved = resolvePilotLines(context, cart);
+  const weightGrams = resolved.reduce(
+    (grams, entry) => grams + entry.product.weightGrams * entry.quantity,
+    0,
+  );
+  const deliveryMethod = resolveDeliveryMethod(requestedDeliveryMethod, weightGrams);
   // No money crosses this boundary: korama_create_order prices every line
   // from market_listings itself.
   const result = await context.repository.createOrder({
     profileId,
     reference,
-    operatingCompanyId: NIGERIA_OPERATING_COMPANY_ID,
-    marketId: NIGERIA_MARKET_ID,
+    operatingCompanyId: GHANA_OPERATING_COMPANY_ID,
+    marketId: GHANA_MARKET_ID,
     lines: resolved.map((entry) => ({
       productId: entry.item.product.id,
       quantity: entry.quantity,
     })),
     deliveryAddress: address,
+    deliveryMethod,
   });
   const view = await context.repository.getOrderView(reference, profileId);
   if (!view) throw new Error("Normalized order was created but could not be read back");
@@ -477,17 +510,17 @@ export async function normalizedVerifyPayment(orderId: string, providerReference
 
 export async function normalizedAllocate(reference: string) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
+  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
   return context.repository.allocateOrderFefo(reference);
 }
 export async function normalizedAdvance(reference: string, status: Extract<OrderStatus, "picked" | "packed" | "dispatched">, weightGrams?: number) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
+  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Order not found in operator scope");
   return context.repository.advanceOrder(reference, status, weightGrams);
 }
 export async function normalizedCommand(reference: string, command: string) {
   const context = await loadContext();
-  if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw notFound("Shipment not found in safety scope");
+  if (!await context.repository.getOrderView(reference, undefined, GHANA_OPERATING_COMPANY_ID)) throw notFound("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
 }
 

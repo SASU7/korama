@@ -36,8 +36,8 @@ export function MarketSwitcher({ market }: { market: MarketCode }) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="NG">Nigeria · NGN</SelectItem>
           <SelectItem value="GH">Ghana · GHS</SelectItem>
+          <SelectItem value="NG">Nigeria · NGN</SelectItem>
         </SelectContent>
       </Select>
     </div>
