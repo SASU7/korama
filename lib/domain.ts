@@ -53,6 +53,58 @@ export type Batch = {
   originSupported: boolean;
 };
 
+export type CartLine = { productId: string; quantity: number };
+
+export type QuoteLine = {
+  productId: string;
+  quantity: number;
+  unitPriceMinor: number;
+  subtotalMinor: number;
+  taxMinor: number;
+  deliveryMinor: number;
+  origin: InventoryClass;
+};
+
+export type Quote = {
+  lines: QuoteLine[];
+  subtotalMinor: number;
+  taxMinor: number;
+  deliveryMinor: number;
+  totalMinor: number;
+  currency: "NGN";
+  itemCount: number;
+};
+
+export type OrderLine = {
+  lineNo: number;
+  productId: string;
+  name: string;
+  producer: string;
+  origin: InventoryClass;
+  quantity: number;
+  unitPriceMinor: number;
+  subtotalMinor: number;
+  taxMinor: number;
+  deliveryMinor: number;
+  batch?: string;
+  allocatedQuantity: number;
+  compliance?: ComplianceSnapshot;
+};
+
+/**
+ * Cart bounds. Enforced here (client and route) and again in
+ * korama_create_order, matching the house style of re-validating in SQL what
+ * the route already checked.
+ */
+export const MAX_CART_LINES = 10;
+export const MAX_LINE_QUANTITY = 10;
+export const MAX_CART_QUANTITY = 30;
+export const TAX_RATE = 0.075;
+export const DELIVERY_GHANA_ORIGIN_MINOR = 450000;
+export const DELIVERY_DIRECT_IMPORT_MINOR = 550000;
+/** Simulated drone payload ceiling; above it, checkout routes to a courier. */
+export const DRONE_PAYLOAD_LIMIT_GRAMS = 2000;
+
 export type OrderEvent = { status: OrderStatus; label: string; detail: string; at: string; complete: boolean };
 export type DeliveryAddress = { recipientName: string; addressLine: string; city: string; countryCode: "NG" };
 export type TransferStep = { label: string; detail: string; complete: boolean };
@@ -64,11 +116,29 @@ export type OriginAssessment = { status: "provisionally_eligible" | "rejected"; 
 export type DeliveryLeg = { sequenceNo: number; mode: "simulated_drone" | "ground_courier"; origin: string; destination: string; status: "planned" | "in_transit" | "complete" | "fallback" };
 export type Shipment = { reference: string; status: "planned" | "in_transit" | "delivered" | "fallback"; legs: DeliveryLeg[]; compliance?: ComplianceSnapshot };
 
+export type Order = {
+  reference: string;
+  status: OrderStatus;
+  lines: OrderLine[];
+  subtotalMinor: number;
+  taxMinor: number;
+  deliveryMinor: number;
+  totalMinor: number;
+  currency: "NGN";
+  itemCount: number;
+  address?: DeliveryAddress;
+  compliance?: ComplianceSnapshot;
+  paymentReference?: string;
+  /** @deprecated single-line shims; drop once every reader uses lines[]. */
+  productId: string;
+  quantity: number;
+};
+
 export type DemoState = {
   products: Product[];
   selectedProductId: string;
   cart: { productId: string; quantity: number }[];
-  order: { reference: string; status: OrderStatus; productId: string; quantity: number; subtotalMinor: number; taxMinor: number; deliveryMinor: number; totalMinor: number; currency: "NGN"; address?: DeliveryAddress; compliance?: ComplianceSnapshot; paymentReference?: string } | null;
+  order: Order | null;
   shipment: Shipment | null;
   orderEvents: OrderEvent[];
   batches: Batch[];
@@ -164,14 +234,110 @@ export function normalizeQuantity(value: unknown): number {
   return quantity;
 }
 export function formatMoney(value: number, currency: string) { return new Intl.NumberFormat(currency === "NGN" ? "en-NG" : "en-GH", { style: "currency", currency, maximumFractionDigits: 0 }).format(value / 100); }
-export function calculateQuote(state: DemoState, productId: string, quantity: number) {
-  const product = getProduct(state, productId);
-  const subtotalMinor = money(product.priceMinor * quantity);
-  const taxMinor = money(subtotalMinor * 0.075);
-  const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
-  return { subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, currency: "NGN" as const };
+/**
+ * Normalise a cart: enforce every bound, fold nothing silently. Duplicate
+ * products are rejected rather than merged — a cart is a map, so a duplicate
+ * is a caller bug, and folding would surprise the user about the unit cap.
+ */
+export function normalizeCart(value: unknown): CartLine[] {
+  if (!Array.isArray(value)) throw new Error("Cart lines must be an array");
+  if (value.length < 1) throw new Error("Add something to the cart first");
+  if (value.length > MAX_CART_LINES)
+    throw new Error(`A cart may contain at most ${MAX_CART_LINES} lines`);
+
+  const lines = value.map((entry, index) => {
+    const line = (entry ?? {}) as Record<string, unknown>;
+    const productId = String(line.productId ?? "").trim();
+    if (!productId) throw new Error(`Line ${index + 1}: a product is required`);
+    return { productId, quantity: normalizeQuantity(line.quantity) };
+  });
+
+  if (new Set(lines.map((line) => line.productId)).size !== lines.length)
+    throw new Error("A cart cannot list the same product twice");
+  const total = lines.reduce((sum, line) => sum + line.quantity, 0);
+  if (total > MAX_CART_QUANTITY)
+    throw new Error(`A cart may contain at most ${MAX_CART_QUANTITY} units in total`);
+  return lines;
+}
+
+/**
+ * Split an order-level delivery fee across lines by subtotal, pushing the
+ * integer residual onto line 1 so the parts sum to the whole exactly. Mirrors
+ * the apportionment in korama_create_order.
+ */
+export function apportionDelivery(subtotals: number[], deliveryMinor: number): number[] {
+  if (!subtotals.length) return [];
+  const total = subtotals.reduce((sum, value) => sum + value, 0);
+  const parts = subtotals.map((subtotal) =>
+    total > 0
+      ? Math.floor((deliveryMinor * subtotal) / total)
+      : Math.floor(deliveryMinor / subtotals.length),
+  );
+  const assigned = parts.reduce((sum, value) => sum + value, 0);
+  parts[0] += deliveryMinor - assigned;
+  return parts;
+}
+
+/**
+ * The single TypeScript definition of order arithmetic. It must agree with
+ * korama_create_order line for line: if the two drift, korama_verify_payment
+ * starts rejecting real Paystack payments because the amount no longer
+ * matches the order total.
+ *
+ * Delivery is an order-level cost — one parcel to one address — so a mixed
+ * cart pays the higher of the two rates rather than the sum of them.
+ */
+export function calculateQuote(state: DemoState, cart: CartLine[]): Quote {
+  const lines: QuoteLine[] = cart.map((line) => {
+    const product = getProduct(state, line.productId);
+    const subtotalMinor = money(product.priceMinor * line.quantity);
+    return {
+      productId: line.productId,
+      quantity: line.quantity,
+      unitPriceMinor: product.priceMinor,
+      subtotalMinor,
+      taxMinor: money(subtotalMinor * TAX_RATE),
+      deliveryMinor: 0,
+      origin: product.origin,
+    };
+  });
+
+  const hasDirectImport = lines.some((line) => line.origin !== "ghana_origin_export");
+  const deliveryMinor = hasDirectImport
+    ? DELIVERY_DIRECT_IMPORT_MINOR
+    : DELIVERY_GHANA_ORIGIN_MINOR;
+  const shares = apportionDelivery(lines.map((line) => line.subtotalMinor), deliveryMinor);
+  lines.forEach((line, index) => {
+    line.deliveryMinor = shares[index];
+  });
+
+  const subtotalMinor = lines.reduce((sum, line) => sum + line.subtotalMinor, 0);
+  const taxMinor = lines.reduce((sum, line) => sum + line.taxMinor, 0);
+  return {
+    lines,
+    subtotalMinor,
+    taxMinor,
+    deliveryMinor,
+    totalMinor: subtotalMinor + taxMinor + deliveryMinor,
+    currency: "NGN" as const,
+    itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
+  };
+}
+
+/** Total parcel weight, which decides whether the drone leg is eligible. */
+export function cartWeightGrams(state: DemoState, cart: CartLine[]) {
+  return cart.reduce(
+    (grams, line) => grams + getProduct(state, line.productId).weightGrams * line.quantity,
+    0,
+  );
 }
 function copyComplianceSnapshot(value: ComplianceSnapshot): ComplianceSnapshot { return { ...value, evidence: [...value.evidence] }; }
+/** A parcel may mix provenance; the certificate follows the Ghana-origin line. */
+function firstGhanaOriginCompliance(order: Order): ComplianceSnapshot | undefined {
+  const line = order.lines.find((l) => l.origin === "ghana_origin_export" && l.compliance);
+  const snapshot = line?.compliance ?? order.compliance;
+  return snapshot ? copyComplianceSnapshot(snapshot) : undefined;
+}
 export function assessOrigin(transformation: string, evidence: string[]): OriginAssessment {
   const normalizedTransformation = transformation.toLowerCase();
   const repackagingOnly = /repackag|relabel|label only|labelled only/.test(normalizedTransformation) && !/blend|process|ferment|roast|mill|weav|sew|fill|manufactur/.test(normalizedTransformation);
@@ -192,7 +358,7 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   if (allowed[state.order.status] !== status) throw new Error(`Order cannot advance from ${state.order.status} to ${status}`);
   state.order.status = status;
   if (status === "packed" && !state.shipment) {
-    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "planned" }], compliance: state.order.compliance ? copyComplianceSnapshot(state.order.compliance) : undefined };
+    state.shipment = { reference: `SHP-${state.order.reference}`, status: "planned", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "planned" }], compliance: firstGhanaOriginCompliance(state.order) };
   }
   if (status === "dispatched" && state.shipment) {
     state.shipment.status = "in_transit";
@@ -206,14 +372,56 @@ export function markOrder(state: DemoState, status: OrderStatus) {
   if (event) { event.complete = true; event.at = stamp(); }
   state.lastMutation = stamp();
 }
-export function allocateFefo(state: DemoState) {
-  if (!state.order || state.order.status !== "paid") throw new Error("Only a paid order can be allocated");
-  const batch = selectFefoBatch(state, state.order.productId, state.order.quantity);
-  if (!batch) throw new Error("No valid, non-quarantined, uncleared stock is available");
-  batch.allocated += state.order.quantity;
-  state.tasks[1].done = true;
+/**
+ * Per-line FEFO, all or nothing — mirroring korama_allocate_order_fefo.
+ *
+ * The dry-run pass matters: it resolves every line against a cloned ledger
+ * before touching real state, so a cart whose third line has no stock leaves
+ * the first two unallocated rather than half-reserving the order.
+ */
+export function allocateCartFefo(state: DemoState) {
+  if (!state.order || state.order.status !== "paid")
+    throw new Error("Only a paid order can be allocated");
+
+  const pending = new Map<string, number>();
+  const planned: { lineNo: number; batch: Batch; quantity: number }[] = [];
+
+  for (const line of state.order.lines) {
+    const candidate = state.batches
+      .filter(
+        (batch) =>
+          batch.productId === line.productId &&
+          !batch.quarantined &&
+          batch.cleared &&
+          // origin support is a Ghana-origin concept; applying it to every
+          // class made directly imported stock permanently unallocatable.
+          (line.origin !== "ghana_origin_export" || batch.originSupported) &&
+          (batch.expiry === "No expiry" || new Date(batch.expiry).getTime() > Date.now()) &&
+          batch.quantity - batch.allocated - (pending.get(batch.id) ?? 0) >= line.quantity,
+      )
+      .sort((a, b) => a.expiry.localeCompare(b.expiry) || a.id.localeCompare(b.id))[0];
+
+    if (!candidate)
+      throw new Error(
+        `Line ${line.lineNo}: no valid, in-date, non-quarantined stock covers ${line.quantity} unit(s)`,
+      );
+    pending.set(candidate.id, (pending.get(candidate.id) ?? 0) + line.quantity);
+    planned.push({ lineNo: line.lineNo, batch: candidate, quantity: line.quantity });
+  }
+
+  // Every line resolved, so commit.
+  for (const allocation of planned) {
+    allocation.batch.allocated += allocation.quantity;
+    const line = state.order.lines.find((l) => l.lineNo === allocation.lineNo);
+    if (line) {
+      line.allocatedQuantity = allocation.quantity;
+      line.batch = allocation.batch.batch;
+    }
+  }
+  const allocateTask = state.tasks.find((task) => /allocate/i.test(task.label));
+  if (allocateTask) allocateTask.done = true;
   markOrder(state, "allocated");
-  return batch;
+  return planned;
 }
 export function buildTelemetry() { return [
   { point: "Lekki launch pad", altitude: 0, speed: 0, battery: 94, link: "Strong" },

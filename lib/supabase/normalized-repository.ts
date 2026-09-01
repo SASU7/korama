@@ -8,24 +8,36 @@ export type Row<Name extends TableName> = Database["public"]["Tables"][Name]["Ro
 type SupabaseError = { code?: string | null; hint?: string | null; message: string };
 export type NormalizedMutationResult = Database["public"]["Functions"]["korama_create_order"]["Returns"];
 
+export type NormalizedOrderLineInput = {
+  /** products.id, not a catalogue slug. */
+  productId: string;
+  quantity: number;
+};
+
+/**
+ * Note what is absent: no currency, no subtotal, no tax, no delivery, no
+ * total. korama_create_order computes every figure from market_listings, so
+ * the client cannot even propose a price.
+ */
 export type NormalizedCreateOrderInput = {
   profileId: string;
   reference: string;
   operatingCompanyId: string;
   marketId: string;
-  productId: string;
-  quantity: number;
-  currency: string;
-  subtotalMinor: number;
-  taxMinor: number;
-  deliveryMinor: number;
-  totalMinor: number;
+  lines: NormalizedOrderLineInput[];
   deliveryAddress: {
     recipientName: string;
     addressLine: string;
     city: string;
     countryCode: "NG";
   };
+};
+
+export type NormalizedAllocation = {
+  lineNo: number;
+  batchId: string;
+  batchReference: string;
+  quantity: number;
 };
 
 export type NormalizedCatalogueItem = {
@@ -194,7 +206,7 @@ export function createNormalizedRepository(client: Client) {
       if (!order) return null;
 
       const [lines, events, paymentAttempts, tasks, shipment] = await Promise.all([
-        checkedMany("order lines read", client.from("order_lines").select("*").eq("order_id", order.id).order("id")),
+        checkedMany("order lines read", client.from("order_lines").select("*").eq("order_id", order.id).order("line_no")),
         checkedMany("order events read", client.from("order_events").select("*").eq("order_id", order.id).order("created_at")),
         checkedMany("payment attempts read", client.from("payment_attempts").select("*").eq("order_id", order.id).order("created_at")),
         checkedMany("order tasks read", client.from("warehouse_tasks").select("*").eq("order_id", order.id).order("created_at")),
@@ -219,13 +231,7 @@ export function createNormalizedRepository(client: Client) {
         p_reference: input.reference,
         p_operating_company_id: input.operatingCompanyId,
         p_market_id: input.marketId,
-        p_product_id: input.productId,
-        p_quantity: input.quantity,
-        p_currency: input.currency,
-        p_subtotal_minor: input.subtotalMinor,
-        p_tax_minor: input.taxMinor,
-        p_delivery_minor: input.deliveryMinor,
-        p_total_minor: input.totalMinor,
+        p_lines: input.lines,
         p_delivery_address: input.deliveryAddress,
       }));
     },

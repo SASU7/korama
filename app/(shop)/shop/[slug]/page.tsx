@@ -11,6 +11,7 @@ import { Money } from "@/components/shared/money";
 import { Identifier } from "@/components/shared/identifier";
 import { OriginBadge } from "@/components/shared/origin-badge";
 import { ProductImage } from "@/components/shop/product-image";
+import { AddToCartButton } from "@/components/shop/add-to-cart-button";
 import { productImageSrc } from "@/lib/product-image";
 import { readNormalizedState } from "@/lib/supabase/normalized-adapter";
 import { readMarkets } from "@/lib/supabase/domain-markets";
@@ -126,9 +127,11 @@ export default async function ProductPage({
               </AlertDescription>
             </Alert>
           ) : (
-            <Button size="lg" className="w-full" asChild>
-              <Link href={`/cart?add=${product.id}`}>Add to cart</Link>
-            </Button>
+            <AddToCartButton
+              productId={product.id}
+              name={product.name}
+              className="w-full"
+            />
           )}
         </div>
       </div>

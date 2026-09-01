@@ -1,6 +1,7 @@
 import { StoreHeader } from "@/components/shop/store-header";
 import { StoreFooter } from "@/components/shop/store-footer";
 import { authContext } from "@/lib/auth";
+import { readCart } from "@/lib/supabase/cart";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function ShopLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const auth = await authContext();
+  const [auth, cart] = await Promise.all([authContext(), readCart()]);
   const displayName =
     auth?.user.user_metadata?.full_name ||
     auth?.user.user_metadata?.name ||
@@ -27,7 +28,7 @@ export default async function ShopLayout({
         displayName={displayName}
         roles={auth?.roles ?? []}
         activeRole={auth?.activeRole ?? "consumer"}
-        cartCount={0}
+        cartCount={cart.lines.reduce((sum, line) => sum + line.quantity, 0)}
       />
       <main className="mx-auto w-full max-w-[1240px] flex-1 px-(--gutter) py-8">
         {children}

@@ -1,7 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { trustedRequestOrigin } from "../lib/request-security.ts";
-import { allocateFefo, assessOrigin, calculateQuote, markOrder, normalizeQuantity, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress } from "../lib/domain.ts";
+import { allocateCartFefo, apportionDelivery, assessOrigin, calculateQuote, cartWeightGrams, markOrder, normalizeCart, normalizeQuantity, seedDemoState, selectFefoBatch, sortieCommand, validateDeliveryAddress, type CartLine, type DemoState, type Order, type Quote } from "../lib/domain.ts";
+
+/** Build the Order shape a quote implies, so tests read like the real flow. */
+function orderFrom(state: DemoState, cart: CartLine[], status: Order["status"], reference = "KOR-NG-240829-001"): Order {
+  const quote: Quote = calculateQuote(state, cart);
+  return {
+    reference,
+    status,
+    lines: quote.lines.map((line, index) => {
+      const product = state.products.find((p) => p.id === line.productId)!;
+      return {
+        lineNo: index + 1,
+        productId: line.productId,
+        name: product.name,
+        producer: product.producer,
+        origin: line.origin,
+        quantity: line.quantity,
+        unitPriceMinor: line.unitPriceMinor,
+        subtotalMinor: line.subtotalMinor,
+        taxMinor: line.taxMinor,
+        deliveryMinor: line.deliveryMinor,
+        allocatedQuantity: 0,
+      };
+    }),
+    subtotalMinor: quote.subtotalMinor,
+    taxMinor: quote.taxMinor,
+    deliveryMinor: quote.deliveryMinor,
+    totalMinor: quote.totalMinor,
+    currency: "NGN",
+    itemCount: quote.itemCount,
+    productId: cart[0].productId,
+    quantity: cart[0].quantity,
+  };
+}
 
 test("the seed contains the two-way catalogue and a roadmap listing", () => {
   const state = seedDemoState();
@@ -27,18 +60,17 @@ test("FEFO skips a valid batch that cannot cover the full order", () => {
 
 test("allocation only advances a paid order and never creates a negative balance", () => {
   const state = seedDemoState();
-  const quote = calculateQuote(state, "shea-balm", 1);
-  state.order = { reference: "KOR-NG-240829-001", status: "paid", productId: "shea-balm", quantity: 1, ...quote };
-  const batch = allocateFefo(state);
-  assert.equal(state.order.status, "allocated");
-  assert.equal(batch.allocated, 1);
-  assert.ok(batch.quantity - batch.allocated >= 0);
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "paid", "KOR-NG-240829-001");
+  const allocations = allocateCartFefo(state);
+  assert.equal(state.order!.status, "allocated");
+  assert.equal(allocations.length, 1);
+  assert.equal(allocations[0].batch.allocated, 1);
+  assert.ok(allocations[0].batch.quantity - allocations[0].batch.allocated >= 0);
 });
 
 test("unsafe weather locks a sortie and records courier fallback", () => {
   const state = seedDemoState();
-  const quote = calculateQuote(state, "shea-balm", 1);
-  state.order = { reference: "KOR-NG-240829-001", status: "dispatched", productId: "shea-balm", quantity: 1, ...quote };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
   state.shipment = { reference: "SHP-KOR-NG-240829-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" }] };
   sortieCommand(state, "inject_weather");
   assert.equal(state.sortie.status, "lockout");
@@ -52,8 +84,7 @@ test("unsafe weather locks a sortie and records courier fallback", () => {
 
 test("failed preflight does not make a sortie launchable", () => {
   const state = seedDemoState();
-  const quote = calculateQuote(state, "shea-balm", 1);
-  state.order = { reference: "KOR-NG-240829-001", status: "dispatched", productId: "shea-balm", quantity: 1, ...quote };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
   state.sortie.gates[3].passed = false;
   assert.throws(() => sortieCommand(state, "preflight"), /Preflight blocked/);
   assert.equal(state.sortie.status, "draft");
@@ -62,8 +93,7 @@ test("failed preflight does not make a sortie launchable", () => {
 
 test("a cleared sortie launches before telemetry advances en route", () => {
   const state = seedDemoState();
-  const quote = calculateQuote(state, "shea-balm", 1);
-  state.order = { reference: "KOR-NG-240829-001", status: "dispatched", productId: "shea-balm", quantity: 1, ...quote };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "dispatched", "KOR-NG-240829-001");
   state.shipment = { reference: "SHP-KOR-NG-240829-001", status: "in_transit", legs: [{ sequenceNo: 1, mode: "simulated_drone", origin: "Lekki warehouse", destination: "Fictional Lekki micro-hub", status: "in_transit" }] };
   sortieCommand(state, "preflight");
   assert.equal(state.sortie.status, "cleared");
@@ -77,8 +107,7 @@ test("a cleared sortie launches before telemetry advances en route", () => {
 
 test("dispatch creates a shipment and delivery completion closes its leg", () => {
   const state = seedDemoState();
-  const quote = calculateQuote(state, "shea-balm", 1);
-  state.order = { reference: "KOR-NG-240829-001", status: "picked", productId: "shea-balm", quantity: 1, ...quote };
+  state.order = orderFrom(state, [{ productId: "shea-balm", quantity: 1 }], "picked", "KOR-NG-240829-001");
   state.orderEvents[0].complete = true;
   markOrder(state, "packed");
   markOrder(state, "dispatched");

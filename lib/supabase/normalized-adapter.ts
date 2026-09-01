@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-import { buildTelemetry, type ComplianceSnapshot, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
+import { buildTelemetry, calculateQuote, MAX_CART_LINES, MAX_CART_QUANTITY, MAX_LINE_QUANTITY, type CartLine, type ComplianceSnapshot, type OrderLine, type DeliveryAddress, type DemoState, type DeliveryLeg, type OrderEvent, type OrderStatus, type Product, type Shipment, type Sortie, type TransferStep, type UserRole } from "@/lib/domain";
 import { createNormalizedRepository, type NormalizedCatalogueItem, type NormalizedOrderView, type NormalizedOperationalSnapshot, type Row } from "@/lib/supabase/normalized-repository";
 import { adminClient } from "@/lib/supabase/admin-client";
 
@@ -237,25 +237,61 @@ function toState(context: NormalizedContext, view: NormalizedOrderView | null, r
   const compliance = Object.keys(lineCompliance).length ? lineCompliance as unknown as ComplianceSnapshot : baseCompliance(context);
   const line = view?.lines[0];
   const product = line ? context.products.find((candidate) => candidate.id === productIdFromUuid(context.items, line.product_id)) : undefined;
+
+  // Order lines, in line_no order. Ordering matters now: getOrderView used to
+  // sort on a random uuid, which is invisible with one line and shuffles the
+  // display on every request with three.
+  const batchByUuid = new Map(context.operations.batches.map((batch) => [batch.id, batch]));
+  const orderLines: OrderLine[] = [...(view?.lines ?? [])]
+    .sort((left, right) => (left.line_no ?? 1) - (right.line_no ?? 1))
+    .map((row, index) => {
+      const slug = productIdFromUuid(context.items, row.product_id) ?? row.product_id;
+      const catalogueProduct = context.products.find((candidate) => candidate.id === slug);
+      const snapshot = object(row.compliance_snapshot);
+      return {
+        lineNo: row.line_no ?? index + 1,
+        productId: slug,
+        name: catalogueProduct?.name ?? text(object(row.product_snapshot).name) ?? slug,
+        producer: catalogueProduct?.producer ?? row.seller_snapshot ?? "",
+        origin: (row.origin_snapshot ?? "direct_import") as OrderLine["origin"],
+        quantity: row.quantity,
+        unitPriceMinor: row.price_minor,
+        subtotalMinor: row.subtotal_minor ?? row.price_minor * row.quantity,
+        taxMinor: row.tax_minor,
+        deliveryMinor: row.delivery_minor ?? 0,
+        batch: row.allocated_batch_id
+          ? batchByUuid.get(row.allocated_batch_id)?.reference
+          : undefined,
+        allocatedQuantity: row.allocated_quantity ?? 0,
+        compliance: Object.keys(snapshot).length
+          ? (snapshot as unknown as ComplianceSnapshot)
+          : undefined,
+      };
+    });
+
   const order = view ? {
     reference: view.order.reference,
     status: view.order.status as OrderStatus,
-    productId: product?.id ?? "shea-balm",
-    quantity: line?.quantity ?? 1,
+    lines: orderLines,
     subtotalMinor: view.order.subtotal_minor,
     taxMinor: view.order.tax_minor,
     deliveryMinor: view.order.delivery_minor,
     totalMinor: view.order.total_minor,
     currency: "NGN" as const,
+    itemCount: orderLines.reduce((sum, l) => sum + l.quantity, 0),
     address: deliveryAddress(view.order.delivery_address_snapshot),
     compliance,
     paymentReference: view.paymentAttempts.find((attempt) => attempt.status === "paid")?.provider_reference,
+    // Deprecated single-line shims, still read by the legacy workspace
+    // component. Remove with it.
+    productId: orderLines[0]?.productId ?? product?.id ?? "shea-balm",
+    quantity: orderLines[0]?.quantity ?? line?.quantity ?? 1,
   } : null;
   const shipment = toShipment(view ?? emptyOrderView(), compliance);
   return {
     products: context.products,
     selectedProductId: context.products.some((candidate) => candidate.id === "shea-balm") ? "shea-balm" : context.products[0]?.id ?? "",
-    cart: line ? [{ productId: product?.id ?? "shea-balm", quantity: line.quantity }] : [],
+    cart: [],
     order,
     shipment,
     orderEvents: view ? toOrderEvents(view.events, view.order.status as OrderStatus) : toOrderEvents([], "pending_payment"),
@@ -287,28 +323,76 @@ export async function readNormalizedOrder(reference: string, profileId?: string,
   return view ? { view, state: toState(context, view, role) } : null;
 }
 
-export async function normalizedQuote(productIdValue: string, quantity: number) {
-  const context = await loadContext();
-  const item = context.items.find((candidate) => candidate.market.code === "NG" && (productId(candidate) === productIdValue || candidate.product.id === productIdValue));
-  if (!item || !item.listing.purchasable) throw new Error("This listing is not purchasable in Nigeria");
-  const product = context.products.find((candidate) => candidate.id === productId(item));
-  if (!product) throw new Error("The requested normalized product was not found");
-  const subtotalMinor = product.priceMinor * quantity;
-  const taxMinor = Math.round(subtotalMinor * 0.075);
-  const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
-  return { product, quote: { subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, currency: "NGN" as const } };
+/**
+ * Resolve catalogue slugs to purchasable Nigerian listings, with a per-line
+ * message so the caller can say which item is the problem.
+ */
+function resolveNigerianLines(context: NormalizedContext, cart: CartLine[]) {
+  return cart.map((line, index) => {
+    const item = context.items.find(
+      (candidate) =>
+        candidate.market.code === "NG" &&
+        (productId(candidate) === line.productId || candidate.product.id === line.productId),
+    );
+    if (!item || !item.listing.purchasable)
+      throw new Error(`Line ${index + 1}: this listing is not purchasable in Nigeria`);
+    const product = context.products.find((candidate) => candidate.id === productId(item));
+    if (!product) throw new Error(`Line ${index + 1}: the product was not found`);
+    return { item, product, quantity: line.quantity };
+  });
 }
 
-export async function normalizedCreateOrder(profileId: string, reference: string, productIdValue: string, quantity: number, address: DeliveryAddress) {
+/**
+ * Server-priced quote. The arithmetic lives in lib/domain.ts so there is
+ * exactly one TypeScript definition to keep in step with the SQL.
+ */
+export async function normalizedQuote(cart: CartLine[]) {
   const context = await loadContext();
-  const item = context.items.find((candidate) => candidate.market.code === "NG" && (productId(candidate) === productIdValue || candidate.product.id === productIdValue));
-  if (!item || !item.listing.purchasable) throw new Error("This listing is not purchasable in Nigeria");
-  const product = context.products.find((candidate) => candidate.id === productId(item));
-  if (!product) throw new Error("The requested normalized product was not found");
-  const subtotalMinor = product.priceMinor * quantity;
-  const taxMinor = Math.round(subtotalMinor * 0.075);
-  const deliveryMinor = product.origin === "ghana_origin_export" ? 450000 : 550000;
-  const result = await context.repository.createOrder({ profileId, reference, operatingCompanyId: NIGERIA_OPERATING_COMPANY_ID, marketId: NIGERIA_MARKET_ID, productId: item.product.id, quantity, currency: "NGN", subtotalMinor, taxMinor, deliveryMinor, totalMinor: subtotalMinor + taxMinor + deliveryMinor, deliveryAddress: address });
+  const resolved = resolveNigerianLines(context, cart);
+  const state = { products: context.products } as DemoState;
+  const quote = calculateQuote(
+    state,
+    resolved.map((entry) => ({ productId: entry.product.id, quantity: entry.quantity })),
+  );
+  return {
+    lines: resolved.map((entry, index) => ({
+      ...quote.lines[index],
+      product: entry.product,
+    })),
+    quote,
+    weightGrams: resolved.reduce(
+      (grams, entry) => grams + entry.product.weightGrams * entry.quantity,
+      0,
+    ),
+    limits: {
+      maxLines: MAX_CART_LINES,
+      maxLineQuantity: MAX_LINE_QUANTITY,
+      maxCartQuantity: MAX_CART_QUANTITY,
+    },
+  };
+}
+
+export async function normalizedCreateOrder(
+  profileId: string,
+  reference: string,
+  cart: CartLine[],
+  address: DeliveryAddress,
+) {
+  const context = await loadContext();
+  const resolved = resolveNigerianLines(context, cart);
+  // No money crosses this boundary: korama_create_order prices every line
+  // from market_listings itself.
+  const result = await context.repository.createOrder({
+    profileId,
+    reference,
+    operatingCompanyId: NIGERIA_OPERATING_COMPANY_ID,
+    marketId: NIGERIA_MARKET_ID,
+    lines: resolved.map((entry) => ({
+      productId: entry.item.product.id,
+      quantity: entry.quantity,
+    })),
+    deliveryAddress: address,
+  });
   const view = await context.repository.getOrderView(reference, profileId);
   if (!view) throw new Error("Normalized order was created but could not be read back");
   return { result, state: toState(context, view) };
@@ -334,4 +418,24 @@ export async function normalizedCommand(reference: string, command: string) {
   const context = await loadContext();
   if (!await context.repository.getOrderView(reference, undefined, NIGERIA_OPERATING_COMPANY_ID)) throw new Error("Shipment not found in safety scope");
   return context.repository.commandSortie(reference, command);
+}
+
+/** Catalogue slug -> products.id, for the cart store. */
+export async function productUuidForSlug(slug: string) {
+  const context = await loadContext();
+  const item = context.items.find(
+    (candidate) => productId(candidate) === slug || candidate.product.id === slug,
+  );
+  return item?.product.id;
+}
+
+/**
+ * products.id -> catalogue slug. Looked up rather than cached: a warm-on-read
+ * cache would silently return undefined whenever the cart is read before the
+ * catalogue, which is exactly what happens on a cold request.
+ */
+export async function slugForProductUuid(uuid: string) {
+  const context = await loadContext();
+  const item = context.items.find((candidate) => candidate.product.id === uuid);
+  return item ? productId(item) : undefined;
 }
