@@ -305,8 +305,12 @@ function toSortie(view: NormalizedOrderView, context: NormalizedContext): Sortie
     { key: "battery", label: "Battery", detail: `${drone?.battery_percent ?? 94}% · reserve protected`, passed: (drone?.battery_percent ?? 94) >= 20 },
     { key: "override", label: "Manual override", detail: drone?.manual_override_ready ? "Safety officer abort control available" : "Manual abort control is not ready", passed: drone?.manual_override_ready ?? false },
   ];
-  const status = row?.status;
-  const allowed = ["draft", "preflight", "cleared", "launched", "en_route", "delivered", "lockout", "abort", "return", "courier_fallback"].includes(status ?? "draft") ? status as Sortie["status"] : "draft";
+  // An order with no sortie row (a ground-courier-only shipment, or one that
+  // has not been dispatched yet) still needs a concrete status: the `??` has
+  // to survive into the result, not just into the membership test, or the
+  // delivery surface renders `undefined.replaceAll(...)`.
+  const status = row?.status ?? "draft";
+  const allowed = ["draft", "preflight", "cleared", "launched", "en_route", "delivered", "lockout", "abort", "return", "courier_fallback"].includes(status) ? status as Sortie["status"] : "draft";
   const routeTelemetry = buildTelemetry(context.runtime.deliveryOriginNodeName, context.runtime.deliveryDestinationNodeName);
   const telemetry = allowed === "launched" ? [routeTelemetry[0]] : ["en_route", "delivered"].includes(allowed) ? routeTelemetry : [];
   const latestEvent = view.sortieEvents.at(-1);
